@@ -28,14 +28,32 @@ Roughly, and how you split it.
 
 ## Baseline defects found
 
-| # | Defect | Where | Fixed / left / out of scope |
+Cross-cutting inventory (Task 0). Every row was verified to exist in the vendor baseline
+(`33f0e66`) before being listed — several of the obvious-looking ones are *not* defects and were
+deliberately left off (see the note below the table). "Where" is the baseline location.
+
+| # | Defect | Where (baseline) | Fixed / left / out of scope |
 | --- | --- | --- | --- |
-| 1 | Bulk update sends >50 ids in one call | `App.tsx` | Chunked at the cap in the transport (W1) |
-| 2 | Stale search response overwrites a newer query (no cancel; applies last-resolved) | `useAssets.ts`, `client.ts` | Fixed — query-keyed fetch + AbortSignal |
-| 3 | Every keystroke fires a request; nothing debounced (trips 80/10 s) | `App.tsx`, `useAssets.ts` | Fixed — 250 ms trailing debounce |
-| 4 | Loading, empty and error conflated (stale rows under a banner; failed first load reads as empty) | `useAssets.ts`, `AssetGrid.tsx` | Fixed — three distinct states |
-| 5 | Query state not in the URL; reload/share loses the view | `App.tsx` | Fixed — URL-backed q/status/kind/tag/sort |
-| 6 | Changing a filter can reuse a cursor from the old query (`400 stale_cursor`) | `App.tsx` | Fixed — cursor excluded from the key, unreachable |
+| 1 | Stale search response overwrites a newer query — the view applies whatever resolves last, and short prefixes are slower, so an old `st` lands after `studio` | `useAssets.ts` | Fixed — query-keyed fetch + AbortSignal; superseded requests cancelled (T1) |
+| 2 | Every keystroke fires a request; nothing debounced (drives straight at the 80 req/10 s limit) | `App.tsx`, `useAssets.ts` | Fixed — 250 ms trailing debounce (6→1 per 6-char query) (T1) |
+| 3 | Loading, empty and error conflated — a failed first load reads as "empty", stale rows sit under a bare banner | `useAssets.ts`, `AssetGrid.tsx` | Fixed — three distinct states (T1) |
+| 4 | Query state not in the URL; reload or share loses the view | `App.tsx` | Fixed — URL-backed q/status/kind/tag/sort; replace-while-typing, push-on-commit (T1) |
+| 5 | Changing a filter can reuse a cursor from the prior query (`400 stale_cursor`) | `App.tsx` | Fixed — cursor excluded from the query key, so the bad request is unreachable, not caught (T1) |
+| 6 | Errors flattened to a raw string (`${status}: message`) shown to the user; no structured code, no human copy, retryable indistinguishable from permanent | `client.ts`, `App.tsx` | Fixed — structured `ApiError` taxonomy (W1) + code-keyed message table (T6) |
+| 7 | No retry/backoff, no client-side rate limiting, no request de-dup — a bad network fails hard and any retry would amplify into the 80/10 s trap | `client.ts` | Fixed — single retry executor (full-jitter, honours `Retry-After`) + one client-wide sliding-window limiter (~70/10 s) + shared in-flight GETs (T4/W1) |
+| 8 | Bulk is broken end to end — the 25 (batch) and 50 (bulk) id caps are unenforced (a large selection is one over-cap call), `207` partial success and `PATCH 409` go unhandled, and failure surfaces to the user as a bare "N updated, M failed" with no reasons, retry, or legal-hold distinction | `client.ts`, `App.tsx` | Fixed — chunk at each cap, per-id `207` partitioning, optimistic write + rollback + `409` reconcile (T3); per-reason outcome copy, retry re-sends only the retryable subset (T6) |
+| 9 | Grid not keyboard operable — the card is a `<div onClick>` with no role/tabindex/keydown, the selection checkbox is unnamed, and selected state is never exposed to assistive tech | `AssetGrid.tsx` | Fixed — roving-tabindex grid, Enter/Space/arrows, `aria-selected`, labelled checkbox (T5) |
+| 10 | Renders every filtered asset (up to 12,400 cards) and re-renders all cards on any selection change | `AssetGrid.tsx` | Fixed — TanStack Virtual (viewport-bounded) + per-card memo keyed on own selected state (T2) |
+| 11 | Thumbnails ignore `hasThumbnail`, use no `loading="lazy"`, and have no error fallback — firing the ~4 % guaranteed 404s as broken images with layout shift | `AssetGrid.tsx`, `AssetDetail.tsx` | Fixed — gated on `hasThumbnail`, lazy, reserved-size placeholder (T2) |
+| 12 | Detail panel has no dialog semantics or focus management — no `role`/`aria-modal`/`aria-labelledby`, no focus-in on open, no restore on close, no Escape | `AssetDetail.tsx` | Fixed — dialog semantics + focus trap/restore + Escape (T5) |
+| 13 | No offline state, though the brief requires one; a dropped connection surfaces only as a failed request | `App.tsx` | Fixed — persistent offline banner from the browser online/offline signal, and writes pause/resume across a drop (T6). *Knowingly left:* queuing offline **writes** for later replay — a bonus, out of scope for the window. |
+
+**Verified NOT defects — deliberately not listed** (each looks like one and was checked against the
+baseline): status is *not* colour-only — the pill renders the status **text** (`statusLabel`), the
+icon we add is an enhancement; focus is *not* invisible — the baseline has a global
+`:focus-visible` outline, the real gap is that the card isn't focusable (row 9); and the baseline
+colour pairs **pass** WCAG AA on inspection, so there is no contrast defect to claim — tool-verified
+contrast is an improvement we made, not a baseline fix.
 
 ---
 
