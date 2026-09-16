@@ -14,9 +14,10 @@ interface Props {
   /** Kept for the App contract; the cache patch drives the grid, so this is a no-op there. */
   onSaved?: (asset: Asset) => void;
   /**
-   * User-facing copy for an error. Injected by App (canonical: client2's
-   * messageForApiError); the default is a minimal, non-leaking fallback so this
-   * component is self-contained and never shows a raw server string.
+   * User-facing copy for an error. Injected by App (canonical:
+   * `messageForApiError` in `@/lib/messages`); the default is a minimal,
+   * non-leaking fallback so this component is self-contained and never shows a
+   * raw server string.
    */
   describeError?: (error: unknown) => string;
 }
