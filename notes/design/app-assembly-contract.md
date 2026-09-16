@@ -53,13 +53,14 @@ To avoid two bulk-bar owners: the BAR is presentational (client2), the ACTION is
 (builder2). App wires them.
 
 ```ts
-// client2 (presentational):
+// client2 (presentational; delivered at ea9a5c8, imports from @/components):
 function BulkBar(props: {
   selectedCount: number;
   onApply: (status: AssetStatus) => void;
   onClear: () => void;
-  result: BulkResult | null;            // renders the outcome via summarizeBulk + messageForApiError
-}): JSX.Element;
+  result: BulkResult | null;            // outcome via summarizeBulk + per-reason 207 breakdown;
+  isApplying?: boolean;                 //   persists after selection clears (renders while result
+}): JSX.Element;                        //   is non-null), so the ACTION hook owns clearing result
 
 // builder2 (data, Task 3): a hook, NOT a bar.
 // useBulkStatus() → { apply(status): void; result: BulkResult | null; isApplying: boolean }
