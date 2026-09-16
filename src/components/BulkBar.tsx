@@ -25,6 +25,19 @@ interface BulkBarProps {
   outcome: BulkOutcomeLike | null;
   /** Retry ONLY the retryable subset (hook.retryRetryable). */
   onRetry: () => void;
+  /**
+   * Whether a retry is currently offered (hook.canRetry: a retryable subset
+   * exists AND no run is in flight). Optional: falls back to a local computation
+   * so this works before the hook value is wired through.
+   */
+  canRetry?: boolean;
+  /**
+   * Dismiss the outcome banner. The outcome deliberately survives across
+   * retries, so a dismiss must clear it via the hook's reset(); wire App's
+   * reset here. When omitted, the banner has no dismiss and clears only on the
+   * next apply / selection change.
+   */
+  onDismiss?: () => void;
   /** Disables the actions while an apply/retry is in flight. */
   isApplying?: boolean;
 }
@@ -43,10 +56,14 @@ export function BulkBar({
   onClear,
   outcome,
   onRetry,
+  canRetry,
+  onDismiss,
   isApplying = false,
 }: BulkBarProps) {
   const failedCount = outcome ? outcome.failedIds.length : 0;
-  const canRetry = !!outcome && outcome.retryableIds.length > 0;
+  // Prefer the hook's canRetry (retryable subset AND not applying); fall back to
+  // the identical local rule so this holds before the prop is wired through.
+  const retryable = canRetry ?? (!!outcome && outcome.retryableIds.length > 0 && !isApplying);
   const reasons = outcome && failedCount > 0 ? bulkFailureReasons(outcome.failures) : '';
   const permanentNote =
     outcome && outcome.permanentIds.length > 0 ? ' Items on legal hold cannot be changed.' : '';
@@ -73,9 +90,10 @@ export function BulkBar({
             title: summarizeBulk(outcome.succeededIds.length, failedCount),
             body: reasons ? (reasons + permanentNote).trim() : undefined,
             tone: failedCount > 0 ? 'warn' : 'info',
-            retryable: canRetry,
+            retryable,
           }}
-          onRetry={canRetry ? onRetry : undefined}
+          onRetry={retryable ? onRetry : undefined}
+          onDismiss={onDismiss}
         />
       )}
     </>
