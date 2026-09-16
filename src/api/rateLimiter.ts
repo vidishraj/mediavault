@@ -67,6 +67,11 @@ export class RollingRateLimiter {
   get windowCount(): number {
     return this.hits.length;
   }
+
+  /** Clear the window (test isolation between cases). */
+  reset(): void {
+    this.hits.length = 0;
+  }
 }
 
 // The server fails the request that makes the window exceed 80 (strictly `> 80`,
@@ -78,5 +83,19 @@ export class RollingRateLimiter {
 export const RATE_LIMIT = 70;
 export const RATE_WINDOW_MS = 10_000;
 
-/** The one budget the whole client shares. */
-export const rateLimiter = new RollingRateLimiter(RATE_LIMIT, RATE_WINDOW_MS);
+/**
+ * The one budget the whole client shares. Declared `let` + a live ESM binding so
+ * tests can swap it (a high-capacity or fake-clock limiter) without the suite
+ * blocking on real refill — the same "injectable seam" the retry policy uses for
+ * its RNG. Production code never reassigns it.
+ */
+export let rateLimiter = new RollingRateLimiter(RATE_LIMIT, RATE_WINDOW_MS);
+
+/** Test seam: replace the shared limiter; returns a restore function. */
+export function __setRateLimiter(next: RollingRateLimiter): () => void {
+  const previous = rateLimiter;
+  rateLimiter = next;
+  return () => {
+    rateLimiter = previous;
+  };
+}
