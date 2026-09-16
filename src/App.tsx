@@ -68,11 +68,16 @@ export function App() {
         <input
           className="search"
           type="search"
+          aria-label="Search assets"
           placeholder="Search assets"
           value={query.q ?? ''}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select value={sort} onChange={(e) => setSort(e.target.value as NonNullable<AssetQuery['sort']>)}>
+        <select
+          aria-label="Sort order"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as NonNullable<AssetQuery['sort']>)}
+        >
           {SORTS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
