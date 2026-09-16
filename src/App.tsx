@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { bulkSetStatus } from '@/api/client';
-import type { ApiError } from '@/api/errors';
 import { AssetDetail } from '@/features/assets/AssetDetail';
 import { AssetGrid } from '@/features/assets/AssetGrid';
 import { useAssetList } from '@/features/assets/useAssetList';
 import { useDebouncedValue } from '@/features/assets/useDebouncedValue';
 import { useUrlAssetQuery } from '@/features/assets/useUrlAssetQuery';
 import { statusLabel } from '@/lib/format';
+import { describeError } from '@/lib/messages';
 import type { Asset, AssetKind, AssetStatus, AssetQuery } from '@/lib/types';
 
 const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
@@ -17,16 +17,6 @@ const SORTS: Array<{ value: NonNullable<AssetQuery['sort']>; label: string }> = 
   { value: 'sizeBytes:desc', label: 'Largest first' },
   { value: 'createdAt:desc', label: 'Newest' },
 ];
-
-// Interim copy for a failed load. The per-code message table is owned by the interface layer;
-// when it lands, this single call site delegates to it, so there is one message table and Task 4's
-// "branch on code, never on message" stays structural. Branching is on the code, never the string.
-function describeError(error: ApiError | null): string {
-  if (!error) return 'Something went wrong.';
-  if (error.code === 'rate_limited') return 'Too many requests just now. Retrying shortly…';
-  if (error.isNetwork) return 'You appear to be offline.';
-  return 'Could not load assets.';
-}
 
 export function App() {
   const { query, setSearch, toggleStatus, toggleKind, setSort } = useUrlAssetQuery();
@@ -135,7 +125,7 @@ export function App() {
 
         {list.status === 'error' && (
           <div className="state state--error" role="alert">
-            <p>{describeError(list.error)}</p>
+            <p>{describeError(list.error) ?? 'Could not load assets.'}</p>
             <button onClick={() => list.refetch()}>Try again</button>
           </div>
         )}
@@ -159,7 +149,7 @@ export function App() {
             <div className="loadmore">
               {list.isFetchNextPageError ? (
                 <div className="state--error" role="alert">
-                  <span>{describeError(list.nextPageError)}</span>
+                  <span>{describeError(list.nextPageError) ?? 'Could not load assets.'}</span>
                   <button onClick={() => void list.fetchNextPage()}>Retry</button>
                 </div>
               ) : list.hasNextPage ? (
