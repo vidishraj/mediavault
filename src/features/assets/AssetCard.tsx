@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { thumbnailUrl } from '@/api/client';
-import { formatBytes, formatDate, statusLabel } from '@/lib/format';
+import { StatusChip } from '@/components/StatusChip';
+import { formatBytes, formatDate } from '@/lib/format';
 import type { Asset } from '@/lib/types';
 
 export interface AssetCardProps {
@@ -65,8 +66,7 @@ function AssetCardImpl({
         <p className="muted">
           {asset.kind} · {formatBytes(asset.sizeBytes)} · {formatDate(asset.updatedAt)}
         </p>
-        {/* TODO(swap): replace with client2's <StatusChip> (icon + label) once on main. */}
-        <span className={`pill pill--${asset.status}`}>{statusLabel(asset.status)}</span>
+        <StatusChip status={asset.status} />
       </div>
       <input
         type="checkbox"

@@ -108,12 +108,23 @@ export function App() {
       {error && <p className="error">{error}</p>}
 
       <main className="content">
+        {/* Dev wiring against the baseline single-page loader so this branch builds and
+            renders; the real assembly (useAssetList infinite query + the selection store)
+            is owned by App.tsx's owner and supersedes this at integration. */}
         <AssetGrid
           assets={items}
+          total={total}
+          isFirstPageLoading={loading}
+          hasNextPage={false}
+          isFetchingNextPage={false}
+          isFetchNextPageError={false}
+          nextPageError={null}
+          onFetchNextPage={() => {}}
           selectedIds={selectedIds}
           activeId={activeId}
           onToggleSelect={toggleSelect}
           onOpen={setActiveId}
+          onSelectRange={(ids) => setSelectedIds(new Set(ids))}
         />
         {activeId && (
           <AssetDetail id={activeId} onClose={() => setActiveId(null)} onSaved={handleSaved} />
