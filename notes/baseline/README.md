@@ -13,6 +13,14 @@ visible at the request layer, with `x-request-id` logged per call. Every number 
 not estimated. Timings vary run to run because the server randomises latency, but the *outcome*
 (the short prefix arrives last) reproduced on every run.
 
+**Isolation (why these numbers are trustworthy).** The request count and timings were captured
+against **my own API instance on my own port** (`PORT=8801 node server/index.mjs`), not the shared
+`:8787` dev instance. The mock's rate limiter keys on `req.socket.remoteAddress`
+(`server/index.mjs:41–46, 184`), which is `localhost` for every crew member, so the shared `:8787`
+is a single 80-req/10s bucket for the whole team — a `429` there could be someone else's traffic,
+and this request count is scored. A separate process has its own in-memory limiter, so driving
+`:8801` directly is contamination-free. The three captured runs show zero `429`/rate errors.
+
 - Machine: `Linux 5.15.0-… x86_64` (see `search-race-capture.txt` header for the exact `uname`/node).
 - Repro script: [`reproduce-search-race.mjs`](./reproduce-search-race.mjs). Raw runs:
   [`search-race-capture.txt`](./search-race-capture.txt).
