@@ -2,7 +2,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 
 import type { Asset, AssetPage, AssetStatus, BulkResult } from '@/lib/types';
-import { rollbackFailures, setStatus, snapshotStatuses } from './cache';
+import { replaceAssets, rollbackFailures, setStatus, snapshotStatuses } from './cache';
 import { isItemRetryable, partitionBulk } from './partition';
 
 function asset(id: string, status: AssetStatus): Asset {
@@ -107,5 +107,28 @@ describe('optimistic apply then roll back ONLY the failures', () => {
     const before = cache(['a', 'draft'], ['other', 'archived']);
     const optimistic = setStatus(before, new Set(['a']), 'approved');
     expect(statusOf(optimistic, 'other')).toBe('archived'); // untouched
+  });
+});
+
+describe('replaceAssets version guard', () => {
+  const versioned = (id: string, version: number, status: AssetStatus): Asset => ({ ...asset(id, status), version });
+  const rowVersion = (data: InfiniteData<AssetPage>, id: string) =>
+    data.pages.flatMap((p) => p.items).find((a) => a.id === id)?.version;
+
+  it('replaces when the incoming version is newer', () => {
+    const before = cache(['a', 'draft']); // v1
+    const after = replaceAssets(before, new Map([['a', versioned('a', 2, 'approved')]]));
+    expect(statusOf(after, 'a')).toBe('approved');
+    expect(rowVersion(after, 'a')).toBe(2);
+  });
+
+  it('does NOT overwrite a newer cached version backwards (slow 207 after a single edit)', () => {
+    const before = cache(['a', 'approved']);
+    // a single edit already advanced the row to v7
+    const advanced = replaceAssets(before, new Map([['a', versioned('a', 7, 'approved')]]));
+    // a slow bulk 207 at v6 arrives
+    const after = replaceAssets(advanced, new Map([['a', versioned('a', 6, 'draft')]]));
+    expect(rowVersion(after, 'a')).toBe(7); // kept the newer
+    expect(statusOf(after, 'a')).toBe('approved');
   });
 });

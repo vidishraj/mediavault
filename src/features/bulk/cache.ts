@@ -44,12 +44,17 @@ export function snapshotStatuses(data: AssetsCache, ids: ReadonlySet<string>): M
 
 /**
  * Replace whole assets by id with the authoritative versions the server
- * returned (the 207's `results[].asset`). This reconciles the incremented
- * `version` into the cache, so a later single edit does not PATCH a stale
- * version and manufacture a 409.
+ * returned (the 207's `results[].asset`), reconciling the incremented `version`
+ * into the cache so a later single edit does not PATCH a stale version and
+ * manufacture a 409. The write is guarded by version: a slow bulk 207 (v6) that
+ * arrives after a single edit already advanced the row (v7) must NOT overwrite
+ * it backwards — only apply when the incoming version is strictly newer.
  */
 export function replaceAssets(data: AssetsCache, byId: ReadonlyMap<string, Asset>): AssetsCache {
-  return mapItems(data, (asset) => byId.get(asset.id) ?? asset);
+  return mapItems(data, (asset) => {
+    const incoming = byId.get(asset.id);
+    return incoming && incoming.version > asset.version ? incoming : asset;
+  });
 }
 
 /** Restore ONLY the failed ids to their snapshotted status; leave successes. */

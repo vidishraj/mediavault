@@ -146,8 +146,12 @@ export function useBulkStatus(selectedIds: ReadonlySet<string>) {
       );
       // detail: reconcile any open panel for a succeeded asset, else a stale
       // detail version manufactures a version conflict on the next single edit.
+      // Version-guarded: a slow 207 must not overwrite a newer single edit
+      // backwards (same guard as the list write).
       for (const [id, asset] of succeededAssets) {
-        queryClient.setQueryData<Asset>(assetKey(id), asset);
+        queryClient.setQueryData<Asset>(assetKey(id), (prev) =>
+          !prev || asset.version > prev.version ? asset : prev,
+        );
       }
 
       setAggregate((prev) => mergeRun(prev, outcome));
@@ -168,26 +172,40 @@ export function useBulkStatus(selectedIds: ReadonlySet<string>) {
   /**
    * Retry ONLY the still-retryable subset (conflict) at the same status; the
    * permanent legal_hold failures stay in the report and are never re-fired.
+   * Guarded against a double-click while a run is in flight: a second concurrent
+   * mutate would duplicate the whole chunked fan-out and DOUBLE-SPEND the
+   * rate-limit budget (the project's central trap), so it is dropped.
    */
   const retryRetryable = useCallback(() => {
+    if (mutation.isPending) return;
     const ids = [...aggregate.retryable.keys()];
     if (ids.length > 0 && lastStatus.current) {
       mutation.mutate({ ids, status: lastStatus.current });
     }
   }, [mutation, aggregate]);
 
+  const canRetry = !mutation.isPending && aggregate.retryable.size > 0;
+
   return useMemo(
     () => ({
       apply,
       retryRetryable,
+      /** True only when there is a retryable subset AND no run is in flight. */
+      canRetry,
       result: mutation.data ?? null,
       outcome,
       isApplying: mutation.isPending,
+      /**
+       * Clears the cumulative report. The aggregate deliberately survives across
+       * retries and only a fresh `apply` resets it, so the WIRING OWNER (App)
+       * must call `reset()` when the SELECTION CHANGES or the banner is dismissed
+       * — otherwise a previous operation's banner lingers above a new selection.
+       */
       reset: () => {
         setAggregate(emptyAggregate());
         mutation.reset();
       },
     }),
-    [apply, retryRetryable, mutation, outcome],
+    [apply, retryRetryable, canRetry, mutation, outcome],
   );
 }
