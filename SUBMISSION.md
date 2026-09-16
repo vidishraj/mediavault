@@ -119,6 +119,9 @@ senior than a styled one, and it keeps the eye on the content.
   editing - refresh to see it, then reapply your change."; `legal_hold` explains
   that assets on legal hold cannot be archived. Each message also carries a tone
   and whether a retry can help, so the UI can offer the right affordance.
+- **Screenshots.** Link forthcoming, captured from the running app once the
+  integrated UI is deployed; the states worth seeing are loading, empty, error,
+  offline, partial bulk failure and the bulk action bar, not just the happy path.
 
 ---
 
