@@ -112,8 +112,10 @@ bundle.
 
 **Virtualization approach** — Windowed rendering with TanStack Virtual over
 ROWS, not cards: the virtualiser counts `ceil(total / columns)` rows and mounts
-only the rows crossing the viewport plus a small overscan, so the DOM holds ~60
-gridcells for a 5,000-row list (measured) instead of one node per asset. Column
+only the rows crossing the viewport plus a small overscan, so the DOM holds a
+viewport-bounded window — ~36 gridcells for a 5,000-row list in jsdom, ~112 with
+840 rows loaded when the deployed build is driven in Chrome (flat with scroll
+depth) — instead of one node per asset. Column
 count is derived from the measured container width via a `ResizeObserver`, so the
 same virtualiser adapts from one to many columns without re-keying. Unloaded rows
 render fixed-height skeletons reserved to `total`, so scrolling into
@@ -206,8 +208,9 @@ Fill in real measurements, not estimates. Say which machine and browser.
 
 | Metric | Before | After | How measured |
 | --- | --- | --- | --- |
-| Rendered DOM nodes at 5,000 rows loaded | 5,000 (one DOM node per row, un-virtualised) | 36 (viewport-bounded; scales with columns × visible rows, never with total) | jsdom render of `AssetGrid` with 5,000 assets, counting `[role="gridcell"]` (`AssetGrid.perf.test.tsx`, Node 20/Linux). The same test asserts the count is below the row total, so the instrument would trip if virtualisation were off. |
+| Rendered DOM nodes at 5,000 rows loaded | 5,000 (one DOM node per row, un-virtualised) | 36 in jsdom at 5,000 rows; ~112 in Chrome at 840 loaded (flat with scroll depth) | Two instruments for two claims. jsdom render of `AssetGrid` with 5,000 assets counting `[role="gridcell"]` (`AssetGrid.perf.test.tsx`, Node 20/Linux) proves the ALGORITHM is viewport-bounded — the test asserts the count is below the row total, so it trips if virtualisation were off. The deployed build driven in Chrome proves it HOLDS IN A REAL LAYOUT ENGINE: 112 gridcells with 840 rows loaded, and the count stays flat as scroll depth grows (77 at the top, 105 at 54,000 px, 112 at 82,953 px), while the 696 px scroller reserves 184,340 px for all 12,400 rows so the scrollbar is honest from first paint instead of growing as pages arrive. |
 | Cards re-rendered when toggling one selection | 12 (every card in the rendered window) | 1 | Same file: a hoisted counter increments once per `AssetCard` render; toggling one id re-renders 1 card. The broken-memo control (a fresh callback identity) re-renders all 12, proving the counter can reach N and that the "1" is memoisation, not an inert test. |
+| Names indistinguishable at a glance (two visible cards whose name truncates to the same string, at viewport scale) | 35 of 56 visible names (62.5%; 12 groups — "Weekend Mar…" ×5, "Warehouse Fl…" ×5) | 0 of 56 (0 groups) | Canvas `measureText` on each name's visible prefix at the card's computed font, before and after on the SAME 56-name population, on the deployed build. "At a glance" is viewport scale — what is on screen at once. The instrument fires at the pre-fix geometry (35 ambiguous), so it is a control, not an assertion that cannot fail. Honest limit: across a larger scrolled population (340 distinct names) collisions reappear (30 groups) because these generated names share long prefixes ("Rooftop Garden Overhead MV-…"), so this improves what a user sees at once rather than guaranteeing global uniqueness; closing it entirely would need a wider card or a shorter name field, a density cost we judged not worth it. The fix is geometry (320 px column minimum, 72 px thumbnail), not a string trick. |
 | Longest task during sustained scroll | | | Not measured — requires a browser performance profile, captured during the recorded walkthrough rather than estimated here. |
 | Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every process on the box, so a 429 there is unrelated traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
 | Production bundle, gzipped | 48 kB (vendor baseline) | 77.09 kB JS + 2.61 kB CSS | `npm run build` with `NODE_ENV=production`, Vite's gzip report (Node 20 / Linux). Three independent measurements agree — this local build, an independent build on a clean host, and the **deployed** artifact measured over HTTPS (244,141 bytes raw, minified, zero `react.development` strings) — so the number is the artifact actually served, not one machine's report. The +29 kB over baseline buys TanStack Query (dedup/cache/one retry executor) and TanStack Virtual (viewport-bounded DOM), the structured transport (error taxonomy, sliding-window limiter, real cancellation), the bulk + selection layers (optimistic write/rollback, `207` partitioning), and the loading/empty/error/offline component shell — weight spent on scored behaviour, not for its own sake |
@@ -223,7 +226,8 @@ Two, and both were **measured before any fix existed**, not inferred from readin
   before/after real: once the fix lands, the "before" is gone.
 - **The un-virtualised grid** — found by counting DOM nodes, not by it feeling slow: the baseline
   renders one node per row, so the count scaled with scroll depth rather than the viewport (after
-  virtualisation, 60 gridcells at 5,000 loaded).
+  virtualisation, ~36 gridcells at 5,000 loaded in jsdom and ~112 at 840 loaded in Chrome, flat
+  with depth).
 
 Neither was a hunch from reading the source; each is a measurement I can name and re-run.
 
