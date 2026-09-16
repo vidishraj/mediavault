@@ -204,7 +204,7 @@ export function AssetGrid(props: AssetGridProps) {
                     active={activeId === asset.id}
                     tabIndex={focus.tabIndexFor(i)}
                     onOpen={onOpen}
-                    onToggleSelect={onToggleSelect}
+                    onPointerSelect={focus.onPointerSelect}
                     registerRef={focus.registerRef}
                   />
                 );

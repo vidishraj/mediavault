@@ -29,9 +29,13 @@ export interface RovingGridFocus {
   registerRef: (id: string, el: HTMLElement | null) => void;
   /** Roving tabindex: 0 for the focused cell, -1 for the rest. */
   tabIndexFor: (index: number) => 0 | -1;
-  /** Pointer entry point: clicking a card moves roving focus (and the anchor) to it. */
-  focusFromPointer: (index: number) => void;
-  /** Sync roving state to a card that received focus by any means, without scrolling. */
+  /**
+   * Pointer selection entry point. `shiftKey` extends the range from the anchor
+   * (anchor preserved); `toggle` (checkbox / ctrl / cmd) toggles one and re-anchors;
+   * a plain click selects only this card and re-anchors.
+   */
+  onPointerSelect: (id: string, mods: { shiftKey: boolean; toggle: boolean }) => void;
+  /** Sync roving index to a card focused by any means, WITHOUT scrolling or anchoring. */
   syncFocus: (index: number) => void;
 }
 
@@ -118,7 +122,10 @@ export function useRovingGridFocus({
         if (e.shiftKey && RANGE_KEYS.has(key as GridNavKey)) {
           const b = rangeBounds(anchorRef.current, ni, s.count);
           if (b) onSelectRange(s.itemIds.slice(b.start, b.end + 1));
-          focusIndex(ni); // anchor stays put while extending
+          // Anchor is preserved so the NEXT Shift+Arrow extends from the same
+          // origin. This holds only because syncFocus no longer re-anchors on the
+          // programmatic focus this triggers — otherwise the range collapsed to one.
+          focusIndex(ni);
         } else {
           anchorRef.current = ni; // a plain move re-anchors
           focusIndex(ni);
@@ -128,12 +135,28 @@ export function useRovingGridFocus({
     [focusIndex, onOpen, onToggleSelect, onSelectRange],
   );
 
-  const focusFromPointer = useCallback(
-    (index: number) => {
-      anchorRef.current = index;
-      focusIndex(index);
+  const onPointerSelect = useCallback(
+    (id: string, mods: { shiftKey: boolean; toggle: boolean }) => {
+      const ids = state.current.itemIds;
+      const index = ids.indexOf(id);
+      if (index < 0) return;
+      if (mods.shiftKey) {
+        // Extend the range from the anchor; the anchor stays put so a further
+        // shift-click keeps growing from the same origin.
+        const b = rangeBounds(anchorRef.current, index, state.current.count);
+        if (b) onSelectRange(ids.slice(b.start, b.end + 1));
+        focusIndex(index);
+      } else if (mods.toggle) {
+        onToggleSelect(id); // checkbox / ctrl / cmd: additive toggle
+        anchorRef.current = index;
+        focusIndex(index);
+      } else {
+        onSelectRange([id]); // plain click: select only this card
+        anchorRef.current = index;
+        focusIndex(index);
+      }
     },
-    [focusIndex],
+    [focusIndex, onSelectRange, onToggleSelect],
   );
 
   // Reconcile when the result set changes (filter removes the focused row, a page
@@ -146,12 +169,15 @@ export function useRovingGridFocus({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemIds]);
 
+  // Sync the roving index to wherever focus actually landed (Tab entry, a click's
+  // native focus). It deliberately does NOT set the anchor: the selection anchor is
+  // owned by the explicit gestures (Space, a plain arrow move, onPointerSelect), so
+  // the programmatic focus fired mid-shift-extend can no longer clobber it.
   const syncFocus = useCallback((index: number) => {
     const ids = state.current.itemIds;
     if (index < 0 || index >= ids.length) return;
     setFocusedIndex(index);
     setFocusedId(ids[index]!);
-    anchorRef.current = index;
   }, []);
 
   const tabIndexFor = useCallback(
@@ -165,7 +191,7 @@ export function useRovingGridFocus({
     onKeyDown,
     registerRef,
     tabIndexFor,
-    focusFromPointer,
+    onPointerSelect,
     syncFocus,
   };
 }
