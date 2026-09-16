@@ -20,7 +20,11 @@ unset, so `npm test` (and `npm run dev`) work as-is.
 
 ## Time spent
 
-Roughly, and how you split it.
+~3 hours of focused work, spread across a single day with breaks between sessions.
+Roughly: a third on the data layer — search correctness, cancellation and the retry
+policy; a third on bulk actions, partial-failure handling and resilience; the rest
+split between the virtualised grid, the keyboard and screen-reader model, and
+writing up the measurements in this document.
 
 ---
 
