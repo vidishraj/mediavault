@@ -16,6 +16,10 @@ Paste your Loom (or equivalent) link here. 5–10 minutes.
 
 Anything we need to know beyond `npm install && npm run dev`.
 
+The jsdom hook tests need `NODE_ENV` unset: React's production build ships no `act`, so a minified
+React under `NODE_ENV=production` cannot render in the test environment. A clean checkout has it
+unset, so `npm test` (and `npm run dev`) work as-is.
+
 ## Time spent
 
 Roughly, and how you split it.
@@ -83,9 +87,10 @@ concurrent requests is free at two layers: the transport shares one in-flight GE
 race test above; a debounce test that reddens if the delay is set to 0; and a URL test that
 reddens if a keystroke pushes instead of replaces (each mutation-checked). Their tooling
 (`@testing-library/react`, `jsdom`) is **dev-only** and does not ship, so the gzipped production
-bundle — a scored number — is unaffected by it. Relatedly, any advisory `npm audit` surfaces is
-in dev tooling only: `npm audit --omit=dev` reports **zero**, so nothing in them reaches the
-production bundle.
+bundle — a scored number — is unaffected by it. The production dependencies are exactly `react`,
+`react-dom` and `@tanstack/react-query`; everything else is dev tooling, so `npm audit --omit=dev`
+is 0 and whatever a bare `npm audit` surfaces on a given day is dev-only and never reaches the
+bundle.
 
 **Virtualization approach**
 
