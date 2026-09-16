@@ -196,7 +196,7 @@ Fill in real measurements, not estimates. Say which machine and browser.
 | Rendered DOM nodes at 5,000 rows loaded | | | |
 | Cards re-rendered when toggling one selection | | | |
 | Longest task during sustained scroll | | | |
-| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every crew member, so a 429 there is someone else's traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
+| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every process on the box, so a 429 there is unrelated traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
 | Production bundle, gzipped | 48 kB | 58.5 kB | `NODE_ENV=production npm run build`, Vite's gzip report (Node 20, Linux). +10.5 kB is TanStack Query, replacing hand-rolled dedup/cache/retry |
 
 What was the actual bottleneck, and how did you find it?
