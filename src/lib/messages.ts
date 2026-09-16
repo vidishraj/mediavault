@@ -226,7 +226,7 @@ const BULK_REASON: Record<string, string> = {
  * "2 on legal hold, 1 a momentary clash." Keeps the partial-failure state
  * specific rather than a bare "2 failed".
  */
-export function bulkFailureReasons(results: Array<{ ok: boolean; code?: string }>): string {
+export function bulkFailureReasons(results: Array<{ ok?: boolean; code?: string }>): string {
   const counts = new Map<string, number>();
   for (const r of results) {
     if (r.ok) continue;
