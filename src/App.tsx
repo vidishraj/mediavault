@@ -4,6 +4,7 @@ import { AssetDetail } from '@/features/assets/AssetDetail';
 import { AssetGrid } from '@/features/assets/AssetGrid';
 import { useAssets } from '@/features/assets/useAssets';
 import { Banner } from '@/components/Banner';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { StateBlock } from '@/components/StateBlock';
 import { GridSkeleton } from '@/components/Skeleton';
 import { statusLabel } from '@/lib/format';
@@ -89,6 +90,8 @@ export function App() {
           ))}
         </select>
       </header>
+
+      <OfflineBanner />
 
       <div className="filters">
         {STATUSES.map((s) => (
