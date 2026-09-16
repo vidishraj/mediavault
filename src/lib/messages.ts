@@ -168,13 +168,26 @@ export interface ApiErrorLike {
 }
 
 /**
- * Canonical mapping from a typed transport error to user copy. Branches on the
- * structured `code` (falling back to HTTP status), never on message text.
- * Returns null for a user-cancelled request ('aborted'), which must stay silent.
+ * Rich mapping from a typed transport error to a full UserMessage (title, body,
+ * tone, retryable). Branches on the structured `code` (falling back to HTTP
+ * status), never on message text. Returns null for a user-cancelled request
+ * ('aborted'), which must stay silent. Used by the shell's own components that
+ * need tone or a retry affordance.
  */
-export function messageForApiError(err: ApiErrorLike): UserMessage | null {
+export function userMessageForApiError(err: ApiErrorLike): UserMessage | null {
   if (err.code === 'aborted') return null;
   return messageForError(err.code ?? undefined, err.status);
+}
+
+/**
+ * The public copy API other layers import: a concise human string for a typed
+ * error, or null for an aborted (silent) request. This is the single copy seam
+ * for callers that just need words (e.g. an inline "couldn't load more" line).
+ * Callers needing tone or a retry affordance use userMessageForApiError.
+ */
+export function messageForApiError(err: ApiErrorLike): string | null {
+  const message = userMessageForApiError(err);
+  return message ? message.title : null;
 }
 
 /**
