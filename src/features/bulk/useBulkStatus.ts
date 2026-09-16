@@ -8,12 +8,12 @@
  * before the server confirms. On the 207 result, only the FAILED ids are rolled
  * back to their snapshot; confirmed successes keep the new status.
  *
- * Retry ownership (MAJOR 2): this is a real call site of `chunkedHelperOptions`.
- * bulkSetStatus already owns chunk-level retry (re-request only the failed
- * chunk), so RQ retry is turned OFF here — otherwise attempts would multiply
- * against the rate limit. Recovery from per-item `conflict` is NOT a blind RQ
- * retry; it is re-invoking this mutation with ONLY `outcome.retryableIds`, so
- * legal_hold (deterministic) is never re-fired.
+ * Retry ownership: this spreads `chunkedHelperOptions` because bulkSetStatus
+ * already owns chunk-level retry (re-request only the failed chunk), so RQ retry
+ * is turned OFF here — otherwise transport and RQ attempts multiply against the
+ * rate limit. Recovery from a per-item `conflict` is NOT a blind RQ retry; it is
+ * re-invoking this mutation with ONLY `outcome.retryableIds`, so legal_hold
+ * (deterministic) is never re-fired.
  */
 
 import { useCallback, useRef } from 'react';
@@ -83,8 +83,13 @@ export function useBulkStatus(selectedIds: ReadonlySet<string>) {
     },
   });
 
-  /** The partitioned outcome of the last run, for the bar to render. */
-  const outcome: BulkOutcome | null = mutation.data ? partitionBulk(mutation.data) : null;
+  /**
+   * The partitioned outcome of the last SETTLED run, for the bar to render.
+   * Null while a run is in flight so a stale outcome banner never lingers over
+   * the next apply/retry.
+   */
+  const outcome: BulkOutcome | null =
+    !mutation.isPending && mutation.data ? partitionBulk(mutation.data) : null;
 
   const apply = useCallback(
     (status: AssetStatus) => {
