@@ -128,9 +128,10 @@ senior than a styled one, and it keeps the eye on the content.
   (pencil, half-filled circle, check, filed box) and its text label, so it stays
   readable for someone who cannot separate red from green. The chip label is
   always dark ink on a pale tint, so its contrast never depends on the hue.
-- **States.** Loading is a calm skeleton that mirrors the card layout (disabled
-  under prefers-reduced-motion) rather than a spinner, so a slow, out-of-order
-  API reads as loading and not broken. Empty distinguishes "no assets yet" from
+- **States.** Loading is a calm skeleton (a shared shimmer primitive, composed
+  into card-shaped placeholders by the grid and disabled under
+  prefers-reduced-motion) rather than a spinner, so a slow, out-of-order API
+  reads as loading and not broken. Empty distinguishes "no assets yet" from
   "nothing matches these filters" and offers a Clear filters action. A fetch
   error with nothing on screen is a full state; a fetch error over existing
   results is a non-blocking banner. Offline is detected from the browser signal.
@@ -138,8 +139,9 @@ senior than a styled one, and it keeps the eye on the content.
   could not be changed.").
 - **Contrast.** Checked against WCAG 2.1 AA using `tools/contrast-check.mjs`, a
   script implementing the WCAG relative-luminance formula (the same maths as the
-  WebAIM Contrast Checker); it fails the build if any pair misses its bar.
-  Measured ratios: body ink `#1b1d21` on white 16.9:1; secondary `#585d66` 6.6:1;
+  WebAIM Contrast Checker); run with `node tools/contrast-check.mjs`, it exits
+  non-zero if any pair misses its bar, so the palette is verified by computation
+  rather than by eye. Measured ratios: body ink `#1b1d21` on white 16.9:1; secondary `#585d66` 6.6:1;
   tertiary `#6f757e` 4.6:1 (large only); white on accent `#2350c9` 6.9:1; danger
   `#a5301f` on white 6.9:1; status labels 14.5-15.3:1 on their tints; status
   icons 4.7-6.2:1; control border `#838a93` 3.5:1 on white and 3.2:1 on the soft
@@ -152,9 +154,14 @@ senior than a styled one, and it keeps the eye on the content.
   editing - refresh to see it, then reapply your change."; `legal_hold` explains
   that assets on legal hold cannot be archived. Each message also carries a tone
   and whether a retry can help, so the UI can offer the right affordance.
-- **Screenshots.** Link forthcoming, captured from the running app once the
-  integrated UI is deployed; the states worth seeing are loading, empty, error,
-  offline, partial bulk failure and the bulk action bar, not just the happy path.
+- **On-device pass and screenshots.** Outstanding, and honestly so. There is no
+  browser in this build environment, so the running application has not been
+  driven end to end by anyone; what is verified is at the unit and jsdom level
+  (the copy layer is unit-pinned, and error-object survival is pinned end to end
+  through the real transport and hook). The render-level assertion lands with the
+  App wiring. Driving the deployed app on a real device, and the screenshots of
+  loading / empty / error / offline / partial bulk failure / the bulk bar, remain
+  a manual step for when the walkthrough is recorded.
 
 ---
 
