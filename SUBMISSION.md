@@ -281,6 +281,13 @@ unit harness (shown able to go red before it is trusted green); the index math
 (`nextFocusIndex`, `selectionRangeIds`) and the render-window bound are pinned
 the same way.
 
+**Accessible names.** I walked every interactive control for an accessible name — the
+filter checkboxes (wrapping labels), the card checkboxes (`aria-label`), the search box, and the
+sort `<select>`. The sweep found the sort control shipping as an unnamed combobox: a screen reader
+announced only its value ("Recently updated"), not that it controls sort order — WCAG 4.1.2. The
+search box was named only by its placeholder, which technically passes but is a documented
+antipattern (the cue disappears the moment you type). Both now carry an explicit `aria-label`.
+
 **Known gaps.** Separated by confidence, honestly. The focus-reconciliation and
 navigation kernels are proven by unit test but have never been exercised in a
 real browser, so the end-to-end focus behaviour is reasoned and unit-verified but
