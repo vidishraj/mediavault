@@ -8,7 +8,11 @@ import { useRovingGridFocus } from './useRovingGridFocus';
 
 /** Must match the .card height in CSS so real rows replace skeletons with no reflow. */
 const ROW_HEIGHT = 104;
-const MIN_CARD_WIDTH = 240;
+// Wider minimum column so the asset name — the primary identifier when scanning —
+// keeps enough room to render its distinguishing suffix beside the thumbnail
+// rather than truncating it. Fewer, wider columns is a deliberate trade of density
+// for legibility; virtualisation keeps the extra rows free to scroll.
+const MIN_CARD_WIDTH = 320;
 
 export interface AssetGridProps {
   assets: Asset[];
@@ -19,7 +23,11 @@ export interface AssetGridProps {
   isFetchNextPageError: boolean;
   nextPageError: unknown;
   onFetchNextPage: () => void;
-  selectedIds: Set<string>;
+  // Read-only by contract: the grid only tests membership (`selectedIds.has`) and
+  // reads `.size`, never mutating. Typing it ReadonlySet lets the caller pass the
+  // selection store's set by reference — preserving the stable identity the card
+  // memoisation depends on — without the type implying the grid may corrupt it.
+  selectedIds: ReadonlySet<string>;
   activeId: string | null;
   onToggleSelect: (id: string) => void;
   onOpen: (id: string) => void;
