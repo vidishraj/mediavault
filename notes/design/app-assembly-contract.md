@@ -47,10 +47,18 @@ interface AssetGridProps {
   // selection + open (App-level state)
   selectedIds: Set<string>;
   activeId: string | null;
-  onToggleSelect: (id: string) => void;
+  onToggleSelect: (id: string) => void;        // Space toggles one and sets the anchor
+  onSelectRange: (ids: string[]) => void;      // Shift+Arrow: grid computes the ordered
+                                               //   anchor→focus id range; App sets the selection
   onOpen: (id: string) => void;
 }
 ```
+
+The **first-page skeleton is grid-owned** (`isFirstPageLoading`), rendered through the SAME
+virtualised layout so real rows replace skeleton rows with no reflow. So App routes
+`status === 'loading'` to `<AssetGrid isFirstPageLoading>`, and there is NO separate shell skeleton
+for first load — that would be two skeleton owners. The shell renders only `empty` and whole-query
+`error`.
 
 `status === 'error'` and `status === 'empty'` never reach the grid — App renders the shell for
 those, so the grid is only ever "loading skeleton" or "rows (+ optional inline next-page affordance)".
