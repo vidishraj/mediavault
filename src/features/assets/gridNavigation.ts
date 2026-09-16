@@ -87,6 +87,34 @@ export function nextFocusIndex(
   }
 }
 
+/**
+ * Reconcile the focused index when the result set changes underneath it — a
+ * filter removes rows, a page appends, an SSE tick patches data. The brief
+ * requires that "focus is never lost to a detached node when a row is removed by
+ * filtering": if the focused row disappears, focus must land on a real row, not
+ * a node that no longer exists.
+ *
+ * Rule: if the previously-focused id survives, follow it to its new position.
+ * Otherwise clamp the previous index into the new range — the row that slid into
+ * that slot is a deterministic neighbour — or -1 when the list is now empty.
+ * Pure and index-clamping, so it is provable without a browser: a removed
+ * focused id can never leave the index pointing past the end.
+ */
+export function reconcileFocusIndex(
+  prevFocusedId: string | null,
+  prevIndex: number,
+  newOrderedIds: readonly string[],
+): number {
+  const n = newOrderedIds.length;
+  if (n === 0) return -1;
+  if (prevFocusedId !== null) {
+    const at = newOrderedIds.indexOf(prevFocusedId);
+    if (at !== -1) return at; // survived — focus follows the same item
+  }
+  if (prevIndex <= 0) return 0;
+  return prevIndex < n ? prevIndex : n - 1;
+}
+
 /** The keys this module handles, for a quick membership test in event handlers. */
 export const GRID_NAV_KEYS: ReadonlySet<string> = new Set<GridNavKey>([
   'ArrowRight',
