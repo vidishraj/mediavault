@@ -319,7 +319,30 @@ senior than a styled one, and it keeps the eye on the content.
 
 ## Trade-offs and cuts
 
-What you deliberately did not do, and what you would do with another day.
+Every cut below was a choice, not an oversight — the brief scores saying what was left and why.
+
+- **Offline write queueing** — a bonus in the brief, skipped on purpose. We detect offline, stop
+  hammering, and resume on reconnect; we do not queue writes *made* while offline for later replay.
+  The required offline state is present; the replay queue is the bonus we did not spend the window on.
+- **Live updates (`GET /api/events`)** — optional, not wired. SSE costs zero rate budget (it
+  short-circuits before the limiter), so this was scope discipline, not a cost concern. The cache
+  reconciliation such a feed needs is already built (writes patch the list and detail caches in
+  place), so a subscription is a small addition, not a rework.
+- **The `/api/stats` header** — optional, not built.
+- **An interactive budget slice** — the client-wide limiter is FIFO with no priority, so a large
+  background bulk can make a foreground search wait behind it: ~11 s at ~7 tokens/s in the worst
+  case. Pre-limiter that search would have been *sent* and 429'd, so waiting beats failing — but it
+  is a real latency coupling. The fix we did not build: reserve a slice of budget for interactive
+  GETs, or take a priority argument (~15 lines on the existing limiter seam).
+- **A structurally-impossible double-retry guard** — chunked helpers own their retry, so a caller
+  must spread `chunkedHelperOptions` or attempts stack 3×3 against the limiter. Today that is a
+  documented rule plus a test that reddens if the guard is removed, and the one real call site
+  honours it — but a *future* call site that forgets the spread still gets 9×. The impossible version
+  exports ready-made options that bake the function and `retry: false` together, so a caller cannot
+  wire one without the other.
+- **Two numbers need a browser** — the longest task during sustained scroll (needs a profile, shown
+  in the walkthrough) and a screen-reader pass are unmeasured, and are stated as outstanding in the
+  Performance and Accessibility sections rather than guessed at.
 
 ## Critique of the API
 
@@ -350,4 +373,17 @@ _(Transport layer — W1. Other tasks may add to this.)_
 
 ## Anything you would like us to look at
 
-Code you are proud of, or a decision you are unsure about and want to discuss.
+- **The tests were validated by breaking the mechanism, not just by passing.** The retry predicate,
+  the stale-response race, the partial-failure rollback, the sliding-window boundary and the 429 copy
+  path were each confirmed to go RED when the behaviour was defeated. A green test that has never been
+  seen red is a claim, not evidence — so each scored one has a mutation on record.
+- **The sliding-window limiter matches the frozen server's eviction predicate exactly**, so the
+  client's notion of "in window" cannot drift from the server's. A fixed window would allow 80 at
+  t=9.9 s and 80 more at t=10.1 s — 160 in one trailing window — while believing it complied.
+- **The `legal_hold` / `conflict` split.** Per-item failures arrive inside a `207`, which is a 2xx,
+  so they never surface as errors and the transport's retry predicate cannot see them. Retry is
+  offered only for the retryable (`conflict`) subset; a deterministic `legal_hold` failure is never
+  re-fired into a limiter that would count it.
+- **The 429 copy path, pinned end to end** — the error object surviving the query hook with its
+  `code` intact, and the specific words reaching the rendered surface, each proven by a test that
+  reddens if the object is flattened or the copy lookup collapses.
