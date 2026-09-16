@@ -7,8 +7,8 @@
  * title, an optional line saying what happens next, a tone, and whether the
  * action is worth retrying. Components render these, never the raw code.
  *
- * Coordinated with the error taxonomy from the data layer (wb-u11); keyed on the
- * API error `code`, with HTTP status and the offline case as fallbacks.
+ * Coordinated with the error taxonomy from the data layer; keyed on the API
+ * error `code`, with HTTP status and the offline case as fallbacks.
  */
 
 export type MessageTone = 'info' | 'warn' | 'danger';

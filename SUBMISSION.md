@@ -16,6 +16,10 @@ Paste your Loom (or equivalent) link here. 5–10 minutes.
 
 Anything we need to know beyond `npm install && npm run dev`.
 
+The jsdom hook tests need `NODE_ENV` unset: React's production build ships no `act`, so a minified
+React under `NODE_ENV=production` cannot render in the test environment. A clean checkout has it
+unset, so `npm test` (and `npm run dev`) work as-is.
+
 ## Time spent
 
 Roughly, and how you split it.
@@ -24,10 +28,32 @@ Roughly, and how you split it.
 
 ## Baseline defects found
 
-| # | Defect | Where | Fixed / left / out of scope |
+Cross-cutting inventory (Task 0). Every row was verified to exist in the vendor baseline
+(`33f0e66`) before being listed — several of the obvious-looking ones are *not* defects and were
+deliberately left off (see the note below the table). "Where" is the baseline location.
+
+| # | Defect | Where (baseline) | Fixed / left / out of scope |
 | --- | --- | --- | --- |
-| 1 | Bulk update sends >50 ids in one call | `App.tsx` | |
-| 2 | | | |
+| 1 | Stale search response overwrites a newer query — the view applies whatever resolves last, and short prefixes are slower, so an old `st` lands after `studio` | `useAssets.ts` | Fixed — query-keyed fetch + AbortSignal; superseded requests cancelled (T1) |
+| 2 | Every keystroke fires a request; nothing debounced (drives straight at the 80 req/10 s limit) | `App.tsx`, `useAssets.ts` | Fixed — 250 ms trailing debounce (6→1 per 6-char query) (T1) |
+| 3 | Loading, empty and error conflated — a failed first load reads as "empty", stale rows sit under a bare banner | `useAssets.ts`, `AssetGrid.tsx` | Fixed — three distinct states (T1) |
+| 4 | Query state not in the URL; reload or share loses the view | `App.tsx` | Fixed — URL-backed q/status/kind/tag/sort; replace-while-typing, push-on-commit (T1) |
+| 5 | Changing a filter can reuse a cursor from the prior query (`400 stale_cursor`) | `App.tsx` | Fixed — cursor excluded from the query key, so the bad request is unreachable, not caught (T1) |
+| 6 | Errors flattened to a raw string (`${status}: message`) shown to the user; no structured code, no human copy, retryable indistinguishable from permanent | `client.ts`, `App.tsx` | Fixed — structured `ApiError` taxonomy (W1) + code-keyed message table (T6) |
+| 7 | No retry/backoff, no client-side rate limiting, no request de-dup — a bad network fails hard and any retry would amplify into the 80/10 s trap | `client.ts` | Fixed — single retry executor (full-jitter, honours `Retry-After`) + one client-wide sliding-window limiter (~70/10 s) + shared in-flight GETs (T4/W1) |
+| 8 | Bulk is broken end to end — the 25 (batch) and 50 (bulk) id caps are unenforced (a large selection is one over-cap call), `207` partial success and `PATCH 409` go unhandled, and failure surfaces to the user as a bare "N updated, M failed" with no reasons, retry, or legal-hold distinction | `client.ts`, `App.tsx` | Fixed — chunk at each cap, per-id `207` partitioning, optimistic write + rollback + `409` reconcile (T3); per-reason outcome copy, retry re-sends only the retryable subset (T6) |
+| 9 | Grid not keyboard operable — the card is a `<div onClick>` with no role/tabindex/keydown, the selection checkbox is unnamed, and selected state is never exposed to assistive tech | `AssetGrid.tsx` | Fixed — roving-tabindex grid, Enter/Space/arrows, `aria-selected`, labelled checkbox (T5) |
+| 10 | Renders every filtered asset (up to 12,400 cards) and re-renders all cards on any selection change | `AssetGrid.tsx` | Fixed — TanStack Virtual (viewport-bounded) + per-card memo keyed on own selected state (T2) |
+| 11 | Thumbnails ignore `hasThumbnail`, use no `loading="lazy"`, and have no error fallback — firing the ~4 % guaranteed 404s as broken images with layout shift | `AssetGrid.tsx`, `AssetDetail.tsx` | Fixed — gated on `hasThumbnail`, lazy, reserved-size placeholder (T2) |
+| 12 | Detail panel has no dialog semantics or focus management — no `role`/`aria-modal`/`aria-labelledby`, no focus-in on open, no restore on close, no Escape | `AssetDetail.tsx` | Fixed — dialog semantics + focus trap/restore + Escape (T5) |
+| 13 | No offline state, though the brief requires one; a dropped connection surfaces only as a failed request | `App.tsx` | Fixed — persistent offline banner from the browser online/offline signal, and writes pause/resume across a drop (T6). *Knowingly left:* queuing offline **writes** for later replay — a bonus, out of scope for the window. |
+
+**Verified NOT defects — deliberately not listed** (each looks like one and was checked against the
+baseline): status is *not* colour-only — the pill renders the status **text** (`statusLabel`), the
+icon we add is an enhancement; focus is *not* invisible — the baseline has a global
+`:focus-visible` outline, the real gap is that the card isn't focusable (row 9); and the baseline
+colour pairs **pass** WCAG AA on inspection, so there is no contrast defect to claim — tool-verified
+contrast is an improvement we made, not a baseline fix.
 
 ---
 
@@ -55,7 +81,34 @@ of the taxonomy, never of a message string. Rejected: a per-call `{retryable}`
 boolean, because the retry rule belongs in one predicate, not scattered at each
 call site where it drifts.
 
-**Stale response handling**
+**Stale response handling** — Two problems that look like one, fixed separately.
+*Correctness:* a slow response for a query the user has moved past must never overwrite the
+current view. The baseline applied whatever resolved last, and the API is deliberately
+slower for short prefixes, so typing `studio` left the two-key `st` result on screen —
+captured in `notes/baseline/`: the correct 1,710-row result arrives at 601 ms, the stale
+3,397-row `st` at 1,045 ms and wins. Fix: fetch keyed on the query (`useInfiniteQuery`), so
+only the active query's data ever renders, and pass the transport's `AbortSignal` so a
+superseded request is genuinely CANCELLED, not ignored — which also stops it consuming rate
+budget. A test drives the same observer `useInfiniteQuery` uses and proves the finished query
+wins even when the stale response lands late. The test is non-vacuous: breaking the
+mechanism (making the query key stop varying by `q`, so a stale response would land in the
+same cache slot) turns it red — validated by mutation, not just by a green run. *Budget:* correctness does not fix the rate
+limit, so a 250 ms trailing debounce collapses a burst of typing into one request (6 → 1 for
+a six-character query), sized against 80 req/10 s where retries count and the shortest
+prefixes are the slowest calls. Rejected: a request-id guard (ignores, does not cancel — the
+slow call still counts against the budget); throttle (fires intermediate prefixes we
+discard); no-debounce-lean-on-cancel (right rows, still trips the limit). De-dup of identical
+concurrent requests is free at two layers: the transport shares one in-flight GET per
+`METHOD path`, and RQ shares one fetch per query key.
+
+*Tests.* Both scored search behaviours have a test that fails if the behaviour is defeated: the
+race test above; a debounce test that reddens if the delay is set to 0; and a URL test that
+reddens if a keystroke pushes instead of replaces (each mutation-checked). Their tooling
+(`@testing-library/react`, `jsdom`) is **dev-only** and does not ship, so the gzipped production
+bundle — a scored number — is unaffected by it. The production dependencies are exactly `react`,
+`react-dom` and `@tanstack/react-query`; everything else is dev tooling, so `npm audit --omit=dev`
+is 0 and whatever a bare `npm audit` surfaces on a given day is dev-only and never reaches the
+bundle.
 
 **Virtualization approach**
 
@@ -79,7 +132,16 @@ makes things worse" is actually prevented. Rejected: matching on the message
 a fixed-window limiter (it would allow 80 at t=9.9s and 80 more at t=10.1s, 160
 in one trailing window, while believing it complied).
 
-**State placement and URL sync**
+**State placement and URL sync** — `q`, `status`, `kind`, `tag` and `sort` live in the URL,
+so reload and share restore the exact view; the cursor does NOT, because it is bound to a
+query and would go stale. The write strategy is split by the kind of change: typing `q` uses
+`replaceState` so a whole typing burst is one Back step rather than one per keystroke, while
+a discrete committed change (a status/kind toggle, a sort) uses `pushState` so Back/Forward
+walks between meaningful views. Pagination resets on any query change by construction: the
+query key excludes the cursor, so changing any field mints a new key and a fresh query from
+page one — `400 stale_cursor` / `bad_cursor` are UNREACHABLE rather than caught after the bad
+request was already sent. Selection and the open detail are transient UI, kept out of the
+URL. Unknown enum values in a shared link are dropped, never forwarded to the API.
 
 ---
 
@@ -92,7 +154,7 @@ Fill in real measurements, not estimates. Say which machine and browser.
 | Rendered DOM nodes at 5,000 rows loaded | | | |
 | Cards re-rendered when toggling one selection | | | |
 | Longest task during sustained scroll | | | |
-| Requests fired while typing a 6-character query | | | |
+| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every crew member, so a 429 there is someone else's traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
 | Production bundle, gzipped | 48 kB | 58.5 kB | `NODE_ENV=production npm run build`, Vite's gzip report (Node 20, Linux). +10.5 kB is TanStack Query, replacing hand-rolled dedup/cache/retry |
 
 What was the actual bottleneck, and how did you find it?

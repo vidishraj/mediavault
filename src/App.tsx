@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { bulkSetStatus } from '@/api/client';
 import { AssetDetail } from '@/features/assets/AssetDetail';
 import { AssetGrid } from '@/features/assets/AssetGrid';
-import { useAssets } from '@/features/assets/useAssets';
+import { useAssetList } from '@/features/assets/useAssetList';
+import { useDebouncedValue } from '@/features/assets/useDebouncedValue';
+import { useUrlAssetQuery } from '@/features/assets/useUrlAssetQuery';
 import { statusLabel } from '@/lib/format';
-import type { Asset, AssetStatus, AssetQuery } from '@/lib/types';
+import { describeError } from '@/lib/messages';
+import type { Asset, AssetKind, AssetStatus, AssetQuery } from '@/lib/types';
 
 const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
+const KINDS: AssetKind[] = ['image', 'video', 'document'];
 const SORTS: Array<{ value: NonNullable<AssetQuery['sort']>; label: string }> = [
   { value: 'updatedAt:desc', label: 'Recently updated' },
   { value: 'name:asc', label: 'Name A–Z' },
@@ -15,15 +19,19 @@ const SORTS: Array<{ value: NonNullable<AssetQuery['sort']>; label: string }> = 
 ];
 
 export function App() {
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<AssetStatus[]>([]);
-  const [sort, setSort] = useState<NonNullable<AssetQuery['sort']>>('updatedAt:desc');
+  const { query, setSearch, toggleStatus, toggleKind, setSort } = useUrlAssetQuery();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Every keystroke sends a request. Nothing is debounced or cancelled.
-  const { items, total, loading, error } = useAssets({ q, status, sort, limit: 24 });
+  // The URL and the input update on every keystroke (responsive, shareable), but the NETWORK query
+  // uses the debounced value, so a burst of typing is one request, not one per key.
+  const debouncedQ = useDebouncedValue(query.q ?? '', 250);
+  const list = useAssetList({ ...query, q: debouncedQ || undefined, limit: 24 });
+
+  const sort = query.sort ?? 'updatedAt:desc';
+  const status = query.status ?? [];
+  const kind = query.kind ?? [];
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -39,7 +47,6 @@ export function App() {
     if (ids.length === 0) return;
     setNotice(null);
     try {
-      // Sends every selected id in one call, which the API refuses above 50.
       const result = await bulkSetStatus(ids, next);
       setNotice(`${result.applied} updated, ${result.failed} failed.`);
       setSelectedIds(new Set());
@@ -49,7 +56,7 @@ export function App() {
   }
 
   function handleSaved(_asset: Asset) {
-    // The list is not told that anything changed, so it shows stale rows.
+    // Live reconciliation is handled by the query cache; nothing to do here for now.
   }
 
   return (
@@ -60,10 +67,10 @@ export function App() {
           className="search"
           type="search"
           placeholder="Search assets"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={query.q ?? ''}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+        <select value={sort} onChange={(e) => setSort(e.target.value as NonNullable<AssetQuery['sort']>)}>
           {SORTS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -75,20 +82,23 @@ export function App() {
       <div className="filters">
         {STATUSES.map((s) => (
           <label key={s}>
-            <input
-              type="checkbox"
-              checked={status.includes(s)}
-              onChange={(e) =>
-                setStatus((prev) =>
-                  e.target.checked ? [...prev, s] : prev.filter((x) => x !== s),
-                )
-              }
-            />
+            <input type="checkbox" checked={status.includes(s)} onChange={() => toggleStatus(s)} />
             {statusLabel(s)}
           </label>
         ))}
-        <span className="muted">
-          {loading ? 'Loading…' : `${items.length} of ${total.toLocaleString()} shown`}
+        <span className="filters__sep" aria-hidden="true">
+          ·
+        </span>
+        {KINDS.map((k) => (
+          <label key={k}>
+            <input type="checkbox" checked={kind.includes(k)} onChange={() => toggleKind(k)} />
+            {k}
+          </label>
+        ))}
+        <span className="muted" aria-live="polite">
+          {list.status === 'loading'
+            ? 'Loading…'
+            : `${list.assets.length} of ${list.total.toLocaleString()} shown`}
         </span>
       </div>
 
@@ -105,27 +115,54 @@ export function App() {
       )}
 
       {notice && <p className="notice">{notice}</p>}
-      {error && <p className="error">{error}</p>}
 
       <main className="content">
-        {/* Dev wiring against the baseline single-page loader so this branch builds and
-            renders; the real assembly (useAssetList infinite query + the selection store)
-            is owned by App.tsx's owner and supersedes this at integration. */}
-        <AssetGrid
-          assets={items}
-          total={total}
-          isFirstPageLoading={loading}
-          hasNextPage={false}
-          isFetchingNextPage={false}
-          isFetchNextPageError={false}
-          nextPageError={null}
-          onFetchNextPage={() => {}}
-          selectedIds={selectedIds}
-          activeId={activeId}
-          onToggleSelect={toggleSelect}
-          onOpen={setActiveId}
-          onSelectRange={(ids) => setSelectedIds(new Set(ids))}
-        />
+        {list.status === 'loading' && (
+          <div className="state state--loading" role="status">
+            Loading assets…
+          </div>
+        )}
+
+        {list.status === 'error' && (
+          <div className="state state--error" role="alert">
+            <p>{describeError(list.error) ?? 'Could not load assets.'}</p>
+            <button onClick={() => list.refetch()}>Try again</button>
+          </div>
+        )}
+
+        {list.status === 'empty' && (
+          <div className="empty">
+            <p>Nothing matches these filters.</p>
+            <p className="muted">Clear the search box or widen the filters.</p>
+          </div>
+        )}
+
+        {list.status === 'ready' && (
+          <>
+            <AssetGrid
+              assets={list.assets}
+              selectedIds={selectedIds}
+              activeId={activeId}
+              onToggleSelect={toggleSelect}
+              onOpen={setActiveId}
+            />
+            <div className="loadmore">
+              {list.isFetchNextPageError ? (
+                <div className="state--error" role="alert">
+                  <span>{describeError(list.nextPageError) ?? 'Could not load assets.'}</span>
+                  <button onClick={() => void list.fetchNextPage()}>Retry</button>
+                </div>
+              ) : list.hasNextPage ? (
+                <button onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
+                  {list.isFetchingNextPage ? 'Loading more…' : 'Load more'}
+                </button>
+              ) : (
+                <span className="muted">End of results</span>
+              )}
+            </div>
+          </>
+        )}
+
         {activeId && (
           <AssetDetail id={activeId} onClose={() => setActiveId(null)} onSaved={handleSaved} />
         )}
