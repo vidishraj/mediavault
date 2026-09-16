@@ -70,9 +70,14 @@ status. The two failure reasons are treated differently (the scored trap):
 `conflict` is random ~7% and RETRYABLE — recovery re-sends ONLY the retryable
 subset, never re-firing legal-hold into a rate limiter that counts it. A 207
 `conflict` is a 2xx so the transport can't see it; retrying just those ids is how
-a bulk action recovers those ~7%. Membership nuance (an optimistic status change
-can make an item stop matching a filtered list): left to reconcile on refetch
-rather than pruned, because pruning would fight row keying, focus and scroll.
+a bulk action recovers those ~7%. Confirmed successes also carry the server's
+authoritative asset (with the incremented `version`) back into both the list and
+the open detail cache, so a later single edit can't PATCH a stale version.
+Membership nuance (an optimistic status change can make an item stop matching a
+filtered list): the item stays visible until that list's NEXT refetch (RQ
+staleness or a filter change) reconciles it — I deliberately do NOT force an
+immediate invalidation, which would refetch every cached list and spend rate
+budget — rather than pruning it, which would fight row keying, focus and scroll.
 
 **409 version conflict (single edit)** — Refetch-and-reconcile, never silent
 discard. On 409 the optimistic edit is rolled back, the authoritative asset is
