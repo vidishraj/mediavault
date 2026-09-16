@@ -132,6 +132,25 @@ staleness or a filter change) reconciles it — I deliberately do NOT force an
 immediate invalidation, which would refetch every cached list and spend rate
 budget — rather than pruning it, which would fight row keying, focus and scroll.
 
+_Measured end to end_ (Chrome, deployed build, chaos ON; instrument: `fetch`
+wrapped to capture every bulk request/response verbatim, and each rendered
+asset's status captured BEFORE the apply so rollback is checked against a known
+prior, not the server's own account). Selected 72, "Set archived" → **4 calls of
+22 / 50 / 1 / 1 ids, max 50** — honouring the bulk-status cap, which is 50, NOT
+the 25 that applies to batch fetch (two different caps in one API). First two
+calls returned **207**: **64 applied, 8 failed (7 `legal_hold`, 1 `conflict`)**.
+Of the 8 failures, the **5 in the rendered window each returned to their EXACT
+individual prior status** (approved→approved, draft→draft, archived→archived)
+while all 45 rendered successes went to archived. That result discriminates the
+implementations: a blanket rollback would have reverted the 45, a blanket commit
+would have left the 8 archived, and "restore one status for all" would have
+failed the three different priors — only per-id rollback produces it. **"Try
+again" then sent exactly ONE id** (the lone `conflict`), never the 7
+deterministic `legal_hold`, so no rate-limit budget is spent on requests that can
+never succeed; after it recovered, the report recomputed to 65 updated / 7 still
+on legal hold and the retry affordance disappeared. Whole exercise: **7 requests,
+ZERO 429s**.
+
 **409 version conflict (single edit)** — Refetch-and-reconcile, never silent
 discard. On 409 the optimistic edit is rolled back, the authoritative asset is
 refetched, and the panel prompts the user to re-apply their change against the
