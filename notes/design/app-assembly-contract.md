@@ -53,21 +53,24 @@ To avoid two bulk-bar owners: the BAR is presentational (client2), the ACTION is
 (builder2). App wires them.
 
 ```ts
-// client2 (presentational; delivered at ea9a5c8, imports from @/components):
+// Presentational bar (interface layer, imports from @/components):
 function BulkBar(props: {
   selectedCount: number;
   onApply: (status: AssetStatus) => void;
   onClear: () => void;
-  result: BulkResult | null;            // outcome via summarizeBulk + per-reason 207 breakdown;
-  isApplying?: boolean;                 //   persists after selection clears (renders while result
-}): JSX.Element;                        //   is non-null), so the ACTION hook owns clearing result
+  outcome: BulkOutcomeLike | null;      // partitioned {succeeded/failed/retryable/permanent}; the
+  onRetry: () => void;                  //   bar shows "Try again" only when retryableIds is
+  isApplying?: boolean;                 //   non-empty; legal-hold items are stated plainly as
+}): JSX.Element;                        //   unchangeable, no button. Persists while outcome != null.
 
-// builder2 (data, Task 3): a hook, NOT a bar.
-// useBulkStatus() → { apply(status): void; result: BulkResult | null; isApplying: boolean }
-//   owns chunking >50, the API call, optimistic setQueriesData + rollback, 207 partial handling.
+// Action hook (writes/optimistic workstream): a hook, NOT a bar.
+// useBulkStatus(selectedIds) → { apply(status): void; retryRetryable(): void; result; outcome;
+//   isApplying: boolean; reset(): void }  — owns chunking >50, the API call, optimistic
+//   setQueriesData + rollback, 207 partial handling, and clearing the outcome on the next apply.
 ```
 
-App: `selectedCount`/`onClear` from the selection store; `onApply`/`result` from `useBulkStatus`.
+App wires: `onApply` ← `apply`, `onRetry` ← `retryRetryable`, `outcome` ← `outcome`, `isApplying` ←
+`isApplying`; `selectedCount`/`onClear` ← the selection store.
 
 ## `AssetGrid` — client (Task 2)
 
