@@ -14,9 +14,13 @@
  *   - CHUNKED helpers (getAssetsByIds, bulkSetStatus) OWN their retry at the
  *     chunk level — re-requesting only the failed chunk is far better than
  *     re-running the whole fan-out — so a caller wiring them into RQ MUST set
- *     `retry: false` on that query/mutation. That is enforced structurally at
- *     each such call site, not by memory, so attempts can never stack to
- *     3 (transport) x 3 (RQ) = 9 against the rate limit.
+ *     `retry: false` (spread `chunkedHelperOptions`) on that query/mutation, or
+ *     attempts stack to 3 (transport) x 3 (RQ) = 9 against the rate limit.
+ *     TODAY there are no such call sites (the bulk mutation lands with wb-ak4);
+ *     the transport test `double-retry guard` proves that a chunked helper wired
+ *     WITH that constant fires only the transport's attempts, and reddens if the
+ *     `retry: false` is removed. Spreading the constant + that test are what make
+ *     this structural rather than a remembered convention.
  *
  * Offline: RQ's `onlineManager` is pointed at our own online observable, so when
  * the wifi drops queries PAUSE (stop hammering) and RESUME on reconnect, and the

@@ -1,8 +1,10 @@
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { chunk, mapWithConcurrency } from './concurrency';
 import { ApiError, apiErrorFromResponse, apiErrorFromThrown, parseRetryAfter } from './errors';
 import { RollingRateLimiter } from './rateLimiter';
+import { chunkedHelperOptions } from './queryClient';
 import { inFlightCount, request } from './http';
 import { computeDelayMs, DEFAULT_RETRY, isRetryable, shouldRetry, withRetry } from './retry';
 
@@ -205,6 +207,45 @@ describe('unknown-code status fallback', () => {
   it('retries an unknown code only on a transient status', () => {
     expect(isRetryable(new ApiError({ code: 'unknown', status: 503, message: '' }))).toBe(true);
     expect(isRetryable(new ApiError({ code: 'unknown', status: 400, message: '' }))).toBe(false);
+  });
+});
+
+describe('double-retry guard', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // A stand-in for a chunked helper (getAssetsByIds / bulkSetStatus): it opts
+  // into the transport's own retry (up to 3 attempts) on a retryable failure.
+  const chunkedHelper = () =>
+    request('/api/chunked', { retry: { ...DEFAULT_RETRY, baseDelayMs: 0, random: () => 0 } });
+
+  // Mirror createQueryClient's retry predicate, but with zero delay so the test
+  // does not sleep. This is the same predicate the app uses.
+  const testClient = () =>
+    new QueryClient({
+      defaultOptions: {
+        queries: { retry: (failureCount, error) => isRetryable(error) && failureCount < DEFAULT_RETRY.maxAttempts, retryDelay: () => 0 },
+      },
+    });
+
+  it('a chunked helper wired with chunkedHelperOptions fires only the transport attempts', async () => {
+    const fetchMock = vi.fn(async () =>
+      json(503, { error: { code: 'upstream_unavailable', message: '' } }, { 'retry-after': '0' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const qc = testClient();
+    await expect(
+      qc.fetchQuery({
+        queryKey: ['chunked'],
+        queryFn: () => chunkedHelper(),
+        ...chunkedHelperOptions, // retry: false — the guard under test
+      }),
+    ).rejects.toBeInstanceOf(ApiError);
+
+    // Transport's own 3 attempts, NOT 3 (transport) x 3 (RQ) = 9.
+    expect(fetchMock).toHaveBeenCalledTimes(DEFAULT_RETRY.maxAttempts);
   });
 });
 
