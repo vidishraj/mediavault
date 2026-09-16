@@ -71,6 +71,24 @@ curl -s -o /dev/null -w '%{http_code}' https://mediavault.vidish.online/api/asse
 curl -s -N -D - https://mediavault.vidish.online/api/events | head   # text/event-stream, x-accel-buffering: no
 ```
 
+### What the smoke test proves — and what it does NOT (read before writing "verified")
+These curls establish a NARROW claim: **the mock API works and the built bundle is served correctly**
+(TLS, health with chaos on, static SPA files + hashed assets, SPA deep-link fallback, same-origin API
+proxy, and SSE arriving unbuffered). They also confirm `:8787` is not externally reachable.
+
+They do NOT establish that **the deployed application works.** Every check here is `curl` against an
+endpoint; none of them execute the SPA. So the React app, the client-side rate limiter, search/query
+behaviour, virtualisation, bulk/partial-failure handling — the entire user-facing surface — is
+**UNEXERCISED on the deployed box.** Do not let a stack of green curls read as "the app works": we have
+evidence the *server* works and the bundle *serves*, which is strictly narrower.
+
+Closing that gap needs a real browser driving the app with chaos on, and **no agent in this fleet has
+one** — so the deployed UI (and the screenshots/video the brief asks for) can only be verified by a
+human. That is a scheduling item for the overseer, not something to paper over with more curl. When the
+grid and search land on `main` and the app becomes worth driving, capture a concrete two-minute path
+(exact URL + a search that reproduces the race + a selection large enough to show partial failure) so
+the on-camera demo is a walk-through, not a hunt.
+
 ## API critique surfaced by deploying (belongs in SUBMISSION.md — do NOT edit frozen server/)
 Framing that scores: we did the correct thing on OUR side of the boundary; each finding reduces to a
 one-line change on THEIRS. This is demonstrated on a real deployment, not reasoned about.
