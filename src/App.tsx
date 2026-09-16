@@ -117,10 +117,22 @@ export function App() {
       {notice && <p className="notice">{notice}</p>}
 
       <main className="content">
-        {list.status === 'loading' && (
-          <div className="state state--loading" role="status">
-            Loading assets…
-          </div>
+        {(list.status === 'loading' || list.status === 'ready') && (
+          <AssetGrid
+            assets={list.assets}
+            total={list.total}
+            isFirstPageLoading={list.status === 'loading'}
+            hasNextPage={list.hasNextPage}
+            isFetchingNextPage={list.isFetchingNextPage}
+            isFetchNextPageError={list.isFetchNextPageError}
+            nextPageError={list.nextPageError}
+            onFetchNextPage={() => void list.fetchNextPage()}
+            selectedIds={selectedIds}
+            activeId={activeId}
+            onToggleSelect={toggleSelect}
+            onOpen={setActiveId}
+            onSelectRange={(ids) => setSelectedIds(new Set(ids))}
+          />
         )}
 
         {list.status === 'error' && (
@@ -135,32 +147,6 @@ export function App() {
             <p>Nothing matches these filters.</p>
             <p className="muted">Clear the search box or widen the filters.</p>
           </div>
-        )}
-
-        {list.status === 'ready' && (
-          <>
-            <AssetGrid
-              assets={list.assets}
-              selectedIds={selectedIds}
-              activeId={activeId}
-              onToggleSelect={toggleSelect}
-              onOpen={setActiveId}
-            />
-            <div className="loadmore">
-              {list.isFetchNextPageError ? (
-                <div className="state--error" role="alert">
-                  <span>{describeError(list.nextPageError) ?? 'Could not load assets.'}</span>
-                  <button onClick={() => void list.fetchNextPage()}>Retry</button>
-                </div>
-              ) : list.hasNextPage ? (
-                <button onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
-                  {list.isFetchingNextPage ? 'Loading more…' : 'Load more'}
-                </button>
-              ) : (
-                <span className="muted">End of results</span>
-              )}
-            </div>
-          </>
         )}
 
         {activeId && (
