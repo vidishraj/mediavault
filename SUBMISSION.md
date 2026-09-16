@@ -79,6 +79,14 @@ discard); no-debounce-lean-on-cancel (right rows, still trips the limit). De-dup
 concurrent requests is free at two layers: the transport shares one in-flight GET per
 `METHOD path`, and RQ shares one fetch per query key.
 
+*Tests.* Both scored search behaviours have a test that fails if the behaviour is defeated: the
+race test above; a debounce test that reddens if the delay is set to 0; and a URL test that
+reddens if a keystroke pushes instead of replaces (each mutation-checked). Their tooling
+(`@testing-library/react`, `jsdom`) is **dev-only** and does not ship, so the gzipped production
+bundle — a scored number — is unaffected by it. Relatedly, any advisory `npm audit` surfaces is
+in dev tooling only: `npm audit --omit=dev` reports **zero**, so nothing in them reaches the
+production bundle.
+
 **Virtualization approach**
 
 **Optimistic updates and rollback**
