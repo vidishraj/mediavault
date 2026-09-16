@@ -634,3 +634,112 @@ input[type='search'] {
     max-width: none;
   }
 }
+
+/* ---------- virtualised grid (Task 2/5) ----------
+   The card is a FIXED-height flex row so every virtual row is exactly ROW_HEIGHT
+   (104px in AssetGrid.tsx); real rows replace skeleton rows with zero layout
+   shift. Selection is a STRUCTURAL cue (border + inset ring + checkbox), kept
+   distinct from focus (:focus-visible outline) and from the StatusChip's colour
+   so no two colour-coded meanings compete on one surface. */
+.grid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+.grid-inner {
+  width: 100%;
+}
+.grid-row {
+  display: grid;
+  gap: var(--s3);
+  align-items: start;
+  padding: 0 var(--s4);
+  box-sizing: border-box;
+}
+.grid-row--skeletons {
+  position: relative;
+  padding-top: var(--s4);
+}
+
+/* Override the gallery card into a compact fixed-height row for virtualisation. */
+.card {
+  display: flex;
+  align-items: stretch;
+  height: 96px;
+  gap: var(--s3);
+}
+.card__thumb {
+  width: 96px;
+  height: 96px;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+  border-right: 1px solid var(--line);
+}
+.card__thumb--placeholder {
+  background: var(--surface-sunken);
+}
+.card__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--s2) var(--s3) var(--s2) 0;
+}
+.card__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card__check {
+  top: var(--s2);
+  left: var(--s2);
+  z-index: 1;
+}
+
+/* Selection: structural, not colour-only. Solid accent border + inset ring +
+   a faint tint; the checkbox is the definitive non-visual cue. */
+.card--selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-soft);
+}
+/* Active (open in the panel): a left accent bar — a different shape from the
+   selection ring so the two never read as the same state. */
+.card--active {
+  box-shadow: inset 3px 0 0 0 var(--line-strong);
+}
+.card--selected.card--active {
+  box-shadow: inset 0 0 0 2px var(--accent), inset 3px 0 0 0 var(--accent);
+}
+.card--skeleton {
+  border-style: dashed;
+  cursor: default;
+  pointer-events: none;
+  background: var(--surface-soft);
+}
+
+/* Incremental pagination affordances (grid-owned; the shell owns whole-view states). */
+.grid-more {
+  padding: var(--s3) var(--s4);
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.grid-more--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  color: var(--danger-ink);
+  background: var(--danger-tint);
+  border-top: 1px solid var(--danger-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
