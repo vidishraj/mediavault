@@ -13,13 +13,17 @@ export interface StatusMeta {
   /** One-line intent, used in tooltips and the detail panel. */
   description: string;
   /**
-   * A shape-distinct glyph. This is the SECOND CHANNEL: status is never carried
-   * by colour alone, so it stays legible for a viewer who cannot separate red
-   * from green. The glyph plus the always-present text label carry the meaning;
-   * colour only reinforces it.
+   * A shape-distinct glyph. It is decorative TO ASSISTIVE TECH (the text label is
+   * the accessible name, so a screen reader is not made to say "pencil Draft"),
+   * but load-bearing VISUALLY as the non-colour status channel, so status stays
+   * legible for a viewer who cannot separate red from green.
    */
   icon: string;
-  /** 1-based position in the lifecycle, so the UI can render it as a progression. */
+  /**
+   * 1-based position in the lifecycle. Rendered as a "(step N of 4)" cue for
+   * assistive tech so a screen-reader user perceives the progression, and it
+   * documents the intended colour/order of the set.
+   */
   step: number;
 }
 

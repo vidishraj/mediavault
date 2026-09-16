@@ -70,10 +70,10 @@ const MESSAGES: Record<string, UserMessage> = {
     tone: 'info',
     retryable: false,
   },
-  // Same situation as stale_cursor from the user's point of view.
+  // A cursor the server no longer accepts (its query changed under it).
   bad_cursor: {
-    title: 'The list moved on',
-    body: 'We refreshed it so you are seeing current results.',
+    title: 'That view is out of date',
+    body: 'We reloaded it so you are seeing current results.',
     tone: 'info',
     retryable: false,
   },
@@ -86,6 +86,16 @@ const MESSAGES: Record<string, UserMessage> = {
   not_found: {
     title: 'This asset is no longer available',
     body: 'It may have been removed.',
+    tone: 'info',
+    retryable: false,
+  },
+  // A missing thumbnail: the ASSET still exists, only its preview is absent. In
+  // practice thumbnails are a plain <img>, so a 404 fires img.onerror rather than
+  // an ApiError and rarely routes here - but mapping it stops the HTTP-404
+  // fallback from wrongly claiming the asset itself is gone.
+  thumbnail_missing: {
+    title: 'Preview unavailable',
+    body: 'The thumbnail could not load. The asset itself is unaffected.',
     tone: 'info',
     retryable: false,
   },
@@ -126,12 +136,19 @@ const MESSAGES: Record<string, UserMessage> = {
   },
 };
 
+/** Title of the generic fallback message. Exported so tests can assert that a
+ *  specific code did NOT collapse to it. */
+export const GENERIC_ERROR_TITLE = 'Something went wrong';
+
 const UNKNOWN: UserMessage = {
-  title: 'Something went wrong',
+  title: GENERIC_ERROR_TITLE,
   body: 'Please try again.',
   tone: 'danger',
   retryable: true,
 };
+
+/** Every code that has a specific message (drives the collapse-catching test). */
+export const KNOWN_ERROR_CODES: string[] = Object.keys(MESSAGES);
 
 /**
  * Resolve a user message from an API error code, falling back to the HTTP
@@ -188,6 +205,34 @@ export function userMessageForApiError(err: ApiErrorLike): UserMessage | null {
 export function messageForApiError(err: ApiErrorLike): string | null {
   const message = userMessageForApiError(err);
   return message ? message.title : null;
+}
+
+/** Structural guard: an object carrying a `code` (the ApiError shape). */
+function isApiErrorLike(err: unknown): err is ApiErrorLike {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
+/**
+ * The safe public entry for a caught `unknown` error (the query layer hands
+ * callers `error: unknown`). It narrows STRUCTURALLY rather than by cast, so the
+ * obvious-but-wrong `messageForApiError(err as ApiErrorLike)` is not the seam any
+ * crew reaches for: a non-ApiError (e.g. a plain Error) does not quietly collapse
+ * to the generic message unnoticed. In dev it warns at the boundary so the
+ * collapse is LOUD rather than silent. Returns null for an aborted (silent)
+ * request; a generic string for an unrecognised shape.
+ */
+export function describeError(err: unknown): string | null {
+  if (isApiErrorLike(err)) return messageForApiError(err);
+  // Warn everywhere except a production build, so the collapse is loud in dev,
+  // in tests, and on the live preview - but never noisy for real users.
+  if (import.meta.env?.MODE !== 'production') {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[messages] a non-ApiError reached the copy layer; showing a generic message:',
+      err,
+    );
+  }
+  return GENERIC_ERROR_TITLE;
 }
 
 /**
