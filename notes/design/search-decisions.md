@@ -95,7 +95,7 @@ after would mean the bad request was already sent (and already counted against t
   background refetch, they are marked as stale, not shown under a bare error banner as the baseline
   does.
 
-## 6. The list-hook contract (agreed with the grid owner)
+## 6. The list-hook contract
 
 `useAssetList(query)` — one `useInfiniteQuery` over `listAssets(query, { signal })`, keyed on the
 query **excluding** the cursor. The return shape is fixed so the grid + virtualiser build against it
@@ -135,4 +135,4 @@ is preserved, never replaced wholesale or reordered on the live tick — so the 
 focus or scroll position. Deliberate trade-off: if the update changes the active sort key (e.g.
 `updatedAt` under `updatedAt:desc`), the row is **not** re-sorted on the tick; re-sorting happens
 only on an explicit refetch or query change. Stability on a 6-second heartbeat beats a correct-but-
-jumpy re-sort. (Open: who owns the `EventSource` subscription itself — raising separately.)
+jumpy re-sort. (Open question: which module owns the `EventSource` subscription — deferred.)

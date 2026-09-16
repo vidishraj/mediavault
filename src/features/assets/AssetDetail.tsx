@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { thumbnailUrl } from '@/api/client';
 import { formatBytes, formatDate, formatDuration, statusLabel } from '@/lib/format';
@@ -36,6 +36,23 @@ export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescr
   const [pendingPatch, setPendingPatch] = useState<AssetPatch | null>(null);
 
   const asset = query.data;
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Focus management: move focus into the panel on open and restore it to the
+  // card that opened it on close. Non-modal side panel, so focus is NOT trapped
+  // (the user can Tab out to the grid); Escape closes.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+    }
+  }
 
   function saved(updated: Asset) {
     setPendingPatch(null);
@@ -61,10 +78,17 @@ export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescr
   }
 
   return (
-    <aside className="panel">
+    <aside
+      className="panel"
+      role="dialog"
+      aria-labelledby="asset-detail-heading"
+      onKeyDown={onKeyDown}
+    >
       <div className="panel__head">
-        <h2>Asset detail</h2>
-        <button onClick={onClose}>Close</button>
+        <h2 id="asset-detail-heading">Asset detail</h2>
+        <button ref={closeRef} onClick={onClose}>
+          Close
+        </button>
       </div>
 
       {query.isLoading && <p className="muted">Loading…</p>}

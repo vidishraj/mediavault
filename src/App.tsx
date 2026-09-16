@@ -1,12 +1,17 @@
-import { useState } from 'react';
-import { bulkSetStatus } from '@/api/client';
+import { useEffect, useRef, useState } from 'react';
+import { BulkBar } from '@/components/BulkBar';
+import { EmptyState } from '@/components/EmptyState';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { QueryErrorBanner } from '@/components/QueryErrorBanner';
+import { ResultCount } from '@/components/ResultCount';
 import { AssetDetail } from '@/features/assets/AssetDetail';
 import { AssetGrid } from '@/features/assets/AssetGrid';
 import { useAssetList } from '@/features/assets/useAssetList';
 import { useDebouncedValue } from '@/features/assets/useDebouncedValue';
 import { useUrlAssetQuery } from '@/features/assets/useUrlAssetQuery';
+import { useBulkStatus } from '@/features/bulk/useBulkStatus';
+import { useSelection } from '@/features/selection/useSelection';
 import { statusLabel } from '@/lib/format';
-import { describeError } from '@/lib/messages';
 import type { Asset, AssetKind, AssetStatus, AssetQuery } from '@/lib/types';
 
 const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
@@ -20,9 +25,9 @@ const SORTS: Array<{ value: NonNullable<AssetQuery['sort']>; label: string }> = 
 
 export function App() {
   const { query, setSearch, toggleStatus, toggleKind, setSort } = useUrlAssetQuery();
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selection = useSelection();
+  const bulk = useBulkStatus(selection.selectedIds);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   // The URL and the input update on every keystroke (responsive, shareable), but the NETWORK query
   // uses the debounced value, so a burst of typing is one request, not one per key.
@@ -33,34 +38,31 @@ export function App() {
   const status = query.status ?? [];
   const kind = query.kind ?? [];
 
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  // The bulk outcome deliberately SURVIVES a retry chain (a permanent failure must not vanish), so it
+  // is cleared only by an explicit dismiss (BulkBar.onDismiss → reset) and whenever the SELECTION
+  // CHANGES — otherwise a prior operation's banner would sit above a new selection. Keyed on the
+  // selection set alone (via a ref to the latest reset) so it does NOT fire when `apply` sets the
+  // outcome without changing the set, which would wipe the banner the instant it appears.
+  const resetBulk = useRef(bulk.reset);
+  resetBulk.current = bulk.reset;
+  useEffect(() => {
+    resetBulk.current();
+  }, [selection.selectedIds]);
 
-  async function applyBulkStatus(next: AssetStatus) {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    setNotice(null);
-    try {
-      const result = await bulkSetStatus(ids, next);
-      setNotice(`${result.applied} updated, ${result.failed} failed.`);
-      setSelectedIds(new Set());
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Bulk update failed');
-    }
-  }
+  // The grid reads membership as `selectedIds.has(id)` and never mutates it, so the store's
+  // ReadonlySet passes straight through by reference — which keeps the STABLE reference the
+  // 12,400-card memoisation depends on, rather than copying into a new Set each render.
+  const selectedIds = selection.selectedIds;
 
   function handleSaved(_asset: Asset) {
-    // Live reconciliation is handled by the query cache; nothing to do here for now.
+    // Live reconciliation happens in the query cache (the bulk hook and the detail edit both write
+    // through it); nothing to do at the App level.
   }
 
   return (
     <div className="app">
+      <OfflineBanner />
+
       <header className="topbar">
         <h1>MediaVault</h1>
         <input
@@ -95,73 +97,55 @@ export function App() {
             {k}
           </label>
         ))}
-        <span className="muted" aria-live="polite">
-          {list.status === 'loading'
-            ? 'Loading…'
-            : `${list.assets.length} of ${list.total.toLocaleString()} shown`}
-        </span>
+        {list.assets.length > 0 && (
+          <button
+            type="button"
+            className="btn-subtle"
+            onClick={() => selection.selectAll(list.assets.map((a) => a.id))}
+          >
+            Select all {list.assets.length} loaded
+          </button>
+        )}
+        <ResultCount loaded={list.assets.length} total={list.total} status={list.status} />
       </div>
 
-      {selectedIds.size > 0 && (
-        <div className="bulkbar">
-          <span>{selectedIds.size} selected</span>
-          {STATUSES.map((s) => (
-            <button key={s} onClick={() => applyBulkStatus(s)}>
-              Set {statusLabel(s).toLowerCase()}
-            </button>
-          ))}
-          <button onClick={() => setSelectedIds(new Set())}>Clear selection</button>
-        </div>
+      {(selection.count > 0 || bulk.outcome) && (
+        <BulkBar
+          selectedCount={selection.count}
+          onApply={bulk.apply}
+          onClear={selection.clear}
+          outcome={bulk.outcome}
+          onRetry={bulk.retryRetryable}
+          canRetry={bulk.canRetry}
+          onDismiss={bulk.reset}
+          isApplying={bulk.isApplying}
+        />
       )}
 
-      {notice && <p className="notice">{notice}</p>}
-
       <main className="content">
-        {list.status === 'loading' && (
-          <div className="state state--loading" role="status">
-            Loading assets…
-          </div>
+        {(list.status === 'loading' || list.status === 'ready') && (
+          <AssetGrid
+            assets={list.assets}
+            total={list.total}
+            isFirstPageLoading={list.status === 'loading'}
+            hasNextPage={list.hasNextPage}
+            isFetchingNextPage={list.isFetchingNextPage}
+            isFetchNextPageError={list.isFetchNextPageError}
+            nextPageError={list.nextPageError}
+            onFetchNextPage={() => void list.fetchNextPage()}
+            selectedIds={selectedIds}
+            activeId={activeId}
+            onToggleSelect={selection.toggle}
+            onOpen={setActiveId}
+            onSelectRange={selection.replaceWith}
+          />
         )}
 
-        {list.status === 'error' && (
-          <div className="state state--error" role="alert">
-            <p>{describeError(list.error) ?? 'Could not load assets.'}</p>
-            <button onClick={() => list.refetch()}>Try again</button>
-          </div>
+        {list.status === 'error' && list.error && (
+          <QueryErrorBanner error={list.error} onRetry={() => list.refetch()} />
         )}
 
-        {list.status === 'empty' && (
-          <div className="empty">
-            <p>Nothing matches these filters.</p>
-            <p className="muted">Clear the search box or widen the filters.</p>
-          </div>
-        )}
-
-        {list.status === 'ready' && (
-          <>
-            <AssetGrid
-              assets={list.assets}
-              selectedIds={selectedIds}
-              activeId={activeId}
-              onToggleSelect={toggleSelect}
-              onOpen={setActiveId}
-            />
-            <div className="loadmore">
-              {list.isFetchNextPageError ? (
-                <div className="state--error" role="alert">
-                  <span>{describeError(list.nextPageError) ?? 'Could not load assets.'}</span>
-                  <button onClick={() => void list.fetchNextPage()}>Retry</button>
-                </div>
-              ) : list.hasNextPage ? (
-                <button onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
-                  {list.isFetchingNextPage ? 'Loading more…' : 'Load more'}
-                </button>
-              ) : (
-                <span className="muted">End of results</span>
-              )}
-            </div>
-          </>
-        )}
+        {list.status === 'empty' && <EmptyState />}
 
         {activeId && (
           <AssetDetail id={activeId} onClose={() => setActiveId(null)} onSaved={handleSaved} />

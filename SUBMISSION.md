@@ -110,7 +110,22 @@ bundle — a scored number — is unaffected by it. The production dependencies 
 is 0 and whatever a bare `npm audit` surfaces on a given day is dev-only and never reaches the
 bundle.
 
-**Virtualization approach**
+**Virtualization approach** — Windowed rendering with TanStack Virtual over
+ROWS, not cards: the virtualiser counts `ceil(total / columns)` rows and mounts
+only the rows crossing the viewport plus a small overscan, so the DOM holds a
+viewport-bounded window — ~36 gridcells for a 5,000-row list in jsdom, ~112 with
+840 rows loaded when the deployed build is driven in Chrome (flat with scroll
+depth) — instead of one node per asset. Column
+count is derived from the measured container width via a `ResizeObserver`, so the
+same virtualiser adapts from one to many columns without re-keying. Unloaded rows
+render fixed-height skeletons reserved to `total`, so scrolling into
+not-yet-fetched pages causes no layout shift and infinite-scroll pages replace
+placeholders in place. The consequence that shapes the keyboard model: a row
+outside the window has no DOM node at all, so focusing it means scrolling it into
+existence first (see Accessibility). Rejected: a plain overflow list of every row
+(flat DOM at 12,400 is the exact defect the brief is testing) and a hand-rolled
+slice-on-scroll, which re-implements the measurement, overscan, and scroll
+anchoring the library already gets right.
 
 **Optimistic updates and rollback** — Optimistic state lives in the TanStack
 Query cache, not a parallel store: a bulk status change patches the `['assets']`
@@ -212,21 +227,71 @@ Fill in real measurements, not estimates. Say which machine and browser.
 
 | Metric | Before | After | How measured |
 | --- | --- | --- | --- |
-| Rendered DOM nodes at 5,000 rows loaded | | | |
-| Cards re-rendered when toggling one selection | | | |
-| Longest task during sustained scroll | | | |
-| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every crew member, so a 429 there is someone else's traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
-| Production bundle, gzipped | 48 kB | 58.5 kB | `NODE_ENV=production npm run build`, Vite's gzip report (Node 20, Linux). +10.5 kB is TanStack Query, replacing hand-rolled dedup/cache/retry |
+| Rendered DOM nodes at 5,000 rows loaded | 5,000 (one DOM node per row, un-virtualised) | 36 in jsdom at 5,000 rows; ~112 in Chrome at 840 loaded (flat with scroll depth) | Two instruments for two claims. jsdom render of `AssetGrid` with 5,000 assets counting `[role="gridcell"]` (`AssetGrid.perf.test.tsx`, Node 20/Linux) proves the ALGORITHM is viewport-bounded — the test asserts the count is below the row total, so it trips if virtualisation were off. The deployed build driven in Chrome proves it HOLDS IN A REAL LAYOUT ENGINE: 112 gridcells with 840 rows loaded, and the count stays flat as scroll depth grows (77 at the top, 105 at 54,000 px, 112 at 82,953 px), while the 696 px scroller reserves 184,340 px for all 12,400 rows so the scrollbar is honest from first paint instead of growing as pages arrive. |
+| Cards re-rendered when toggling one selection | 12 (every card in the rendered window) | 1 | Same file: a hoisted counter increments once per `AssetCard` render; toggling one id re-renders 1 card. The broken-memo control (a fresh callback identity) re-renders all 12, proving the counter can reach N and that the "1" is memoisation, not an inert test. |
+| Names indistinguishable at a glance (two visible cards whose name truncates to the same string, at viewport scale) | 35 of 56 visible names (62.5%; 12 groups — "Weekend Mar…" ×5, "Warehouse Fl…" ×5) | 0 of 56 (0 groups) | Canvas `measureText` on each name's visible prefix at the card's computed font, before and after on the SAME 56-name population, on the deployed build. "At a glance" is viewport scale — what is on screen at once. The instrument fires at the pre-fix geometry (35 ambiguous), so it is a control, not an assertion that cannot fail. Honest limit: across a larger scrolled population (340 distinct names) collisions reappear (30 groups) because these generated names share long prefixes ("Rooftop Garden Overhead MV-…"), so this improves what a user sees at once rather than guaranteeing global uniqueness; closing it entirely would need a wider card or a shorter name field, a density cost we judged not worth it. The fix is geometry (320 px column minimum, 72 px thumbnail), not a string trick. |
+| Longest task during sustained scroll | | | Not measured — requires a browser performance profile, captured during the recorded walkthrough rather than estimated here. |
+| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every process on the box, so a 429 there is unrelated traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
+| Production bundle, gzipped | 48 kB (vendor baseline) | 77.09 kB JS + 2.61 kB CSS | `npm run build` with `NODE_ENV=production`, Vite's gzip report (Node 20 / Linux). Three independent measurements agree — this local build, an independent build on a clean host, and the **deployed** artifact measured over HTTPS (244,141 bytes raw, minified, zero `react.development` strings) — so the number is the artifact actually served, not one machine's report. The +29 kB over baseline buys TanStack Query (dedup/cache/one retry executor) and TanStack Virtual (viewport-bounded DOM), the structured transport (error taxonomy, sliding-window limiter, real cancellation), the bulk + selection layers (optimistic write/rollback, `207` partitioning), and the loading/empty/error/offline component shell — weight spent on scored behaviour, not for its own sake |
 
 What was the actual bottleneck, and how did you find it?
+
+Two, and both were **measured before any fix existed**, not inferred from reading the code:
+
+- **The search race** — caught at the network layer against the untouched baseline. Short prefixes
+  are deliberately slower, so the earlier request resolves last: on the deploy, `q=c` returns 10,681
+  matches at 1.09 s while `q=campaign` returns 2,248 at 0.21 s — a *larger*, staler count visibly
+  overwriting the finished one. Capturing it in `notes/baseline/` first is what makes the
+  before/after real: once the fix lands, the "before" is gone.
+- **The un-virtualised grid** — found by counting DOM nodes, not by it feeling slow: the baseline
+  renders one node per row, so the count scaled with scroll depth rather than the viewport (after
+  virtualisation, ~36 gridcells at 5,000 loaded in jsdom and ~112 at 840 loaded in Chrome, flat
+  with depth).
+
+Neither was a hunch from reading the source; each is a measurement I can name and re-run.
 
 ---
 
 ## Accessibility
 
-- Keyboard model you implemented, in one paragraph.
-- How you tested it, including any screen reader.
-- Known gaps.
+**Keyboard model.** The grid uses a roving tabindex: exactly one card is in the
+tab order at any time (every other card is `tabIndex=-1`), so the whole grid is a
+single tab stop rather than 12,400. Arrow keys move the focused cell (with
+Home/End and PageUp/PageDown), Enter opens the detail panel, Space toggles
+selection and sets the range anchor, and Shift+arrows extend a contiguous
+selection from that anchor. Because the list is virtualised, the card you are
+navigating to may not be mounted — a row outside the rendered window has no DOM
+node to receive focus — so navigation first scrolls the target index into
+existence and then focuses it on mount (a pending-focus id handed to the row's
+ref callback). This scroll-then-focus step is the design, not a fallback: it is
+the only correct way to move focus across a window that renders on demand.
+
+**How I tested it.** I did not run a screen reader. The brief permits saying so,
+and claiming a pass I did not observe would be worse than an honest gap. What I
+did verify, headlessly: the ARIA structure (grid/row/gridcell roles,
+`aria-selected`, accessible names on each card and its select checkbox), the
+roving tab order and focus movement, the polite live region that announces
+selection changes, and — the part most likely to break silently — the
+focus-reconciliation kernel. That kernel (`reconcileFocusIndex`) decides where
+focus goes when the row it was on disappears, for example when a filter removes
+it: focus follows the same asset if it survives, otherwise clamps to the nearest
+surviving neighbour, and only becomes "none" when the list empties — so focus is
+never left on a detached node. It is a pure function pinned by a failure-capable
+unit harness (shown able to go red before it is trusted green); the index math
+(`nextFocusIndex`, `selectionRangeIds`) and the render-window bound are pinned
+the same way.
+
+**Known gaps.** Separated by confidence, honestly. The focus-reconciliation and
+navigation kernels are proven by unit test but have never been exercised in a
+real browser, so the end-to-end focus behaviour is reasoned and unit-verified but
+unobserved.
+No screen reader has been run, so the announced experience (reading order,
+live-region timing under NVDA/VoiceOver) is unchecked. The detail panel is a
+non-modal side panel: focus moves into it on open and restores to the originating
+card on close, and Escape closes it, but focus is deliberately NOT trapped — I
+rejected a modal focus trap because the panel coexists with the grid and the
+brief explicitly asks for no focus traps, so a user can Tab out to the grid by
+design.
 
 ---
 
@@ -251,9 +316,10 @@ senior than a styled one, and it keeps the eye on the content.
   (pencil, half-filled circle, check, filed box) and its text label, so it stays
   readable for someone who cannot separate red from green. The chip label is
   always dark ink on a pale tint, so its contrast never depends on the hue.
-- **States.** Loading is a calm skeleton that mirrors the card layout (disabled
-  under prefers-reduced-motion) rather than a spinner, so a slow, out-of-order
-  API reads as loading and not broken. Empty distinguishes "no assets yet" from
+- **States.** Loading is a calm skeleton (a shared shimmer primitive, composed
+  into card-shaped placeholders by the grid and disabled under
+  prefers-reduced-motion) rather than a spinner, so a slow, out-of-order API
+  reads as loading and not broken. Empty distinguishes "no assets yet" from
   "nothing matches these filters" and offers a Clear filters action. A fetch
   error with nothing on screen is a full state; a fetch error over existing
   results is a non-blocking banner. Offline is detected from the browser signal.
@@ -261,8 +327,9 @@ senior than a styled one, and it keeps the eye on the content.
   could not be changed.").
 - **Contrast.** Checked against WCAG 2.1 AA using `tools/contrast-check.mjs`, a
   script implementing the WCAG relative-luminance formula (the same maths as the
-  WebAIM Contrast Checker); it fails the build if any pair misses its bar.
-  Measured ratios: body ink `#1b1d21` on white 16.9:1; secondary `#585d66` 6.6:1;
+  WebAIM Contrast Checker); run with `node tools/contrast-check.mjs`, it exits
+  non-zero if any pair misses its bar, so the palette is verified by computation
+  rather than by eye. Measured ratios: body ink `#1b1d21` on white 16.9:1; secondary `#585d66` 6.6:1;
   tertiary `#6f757e` 4.6:1 (large only); white on accent `#2350c9` 6.9:1; danger
   `#a5301f` on white 6.9:1; status labels 14.5-15.3:1 on their tints; status
   icons 4.7-6.2:1; control border `#838a93` 3.5:1 on white and 3.2:1 on the soft
@@ -275,15 +342,43 @@ senior than a styled one, and it keeps the eye on the content.
   editing - refresh to see it, then reapply your change."; `legal_hold` explains
   that assets on legal hold cannot be archived. Each message also carries a tone
   and whether a retry can help, so the UI can offer the right affordance.
-- **Screenshots.** Link forthcoming, captured from the running app once the
-  integrated UI is deployed; the states worth seeing are loading, empty, error,
-  offline, partial bulk failure and the bulk action bar, not just the happy path.
+- **On-device pass and screenshots.** Outstanding, and honestly so. The running
+  application has not been driven end to end in a real browser, so the on-device
+  pass and screenshots are to be captured during the recorded walkthrough rather
+  than claimed here. What is verified is at the unit and jsdom level (the copy
+  layer is unit-pinned, and error-object survival is pinned end to end through the
+  real transport and hook). The render-level assertion lands with the App wiring.
+  The remaining screenshots of loading / empty / error / offline / partial bulk
+  failure / the bulk bar are part of that same recorded pass.
 
 ---
 
 ## Trade-offs and cuts
 
-What you deliberately did not do, and what you would do with another day.
+Every cut below was a choice, not an oversight — the brief scores saying what was left and why.
+
+- **Offline write queueing** — a bonus in the brief, skipped on purpose. We detect offline, stop
+  hammering, and resume on reconnect; we do not queue writes *made* while offline for later replay.
+  The required offline state is present; the replay queue is the bonus we did not spend the window on.
+- **Live updates (`GET /api/events`)** — optional, not wired. SSE costs zero rate budget (it
+  short-circuits before the limiter), so this was scope discipline, not a cost concern. The cache
+  reconciliation such a feed needs is already built (writes patch the list and detail caches in
+  place), so a subscription is a small addition, not a rework.
+- **The `/api/stats` header** — optional, not built.
+- **An interactive budget slice** — the client-wide limiter is FIFO with no priority, so a large
+  background bulk can make a foreground search wait behind it: ~11 s at ~7 tokens/s in the worst
+  case. Pre-limiter that search would have been *sent* and 429'd, so waiting beats failing — but it
+  is a real latency coupling. The fix we did not build: reserve a slice of budget for interactive
+  GETs, or take a priority argument (~15 lines on the existing limiter seam).
+- **A structurally-impossible double-retry guard** — chunked helpers own their retry, so a caller
+  must spread `chunkedHelperOptions` or attempts stack 3×3 against the limiter. Today that is a
+  documented rule plus a test that reddens if the guard is removed, and the one real call site
+  honours it — but a *future* call site that forgets the spread still gets 9×. The impossible version
+  exports ready-made options that bake the function and `retry: false` together, so a caller cannot
+  wire one without the other.
+- **Two numbers need a browser** — the longest task during sustained scroll (needs a profile, shown
+  in the walkthrough) and a screen-reader pass are unmeasured, and are stated as outstanding in the
+  Performance and Accessibility sections rather than guessed at.
 
 ## Critique of the API
 
@@ -314,4 +409,17 @@ _(Transport layer — W1. Other tasks may add to this.)_
 
 ## Anything you would like us to look at
 
-Code you are proud of, or a decision you are unsure about and want to discuss.
+- **The tests were validated by breaking the mechanism, not just by passing.** The retry predicate,
+  the stale-response race, the partial-failure rollback, the sliding-window boundary and the 429 copy
+  path were each confirmed to go RED when the behaviour was defeated. A green test that has never been
+  seen red is a claim, not evidence — so each scored one has a mutation on record.
+- **The sliding-window limiter matches the frozen server's eviction predicate exactly**, so the
+  client's notion of "in window" cannot drift from the server's. A fixed window would allow 80 at
+  t=9.9 s and 80 more at t=10.1 s — 160 in one trailing window — while believing it complied.
+- **The `legal_hold` / `conflict` split.** Per-item failures arrive inside a `207`, which is a 2xx,
+  so they never surface as errors and the transport's retry predicate cannot see them. Retry is
+  offered only for the retryable (`conflict`) subset; a deterministic `legal_hold` failure is never
+  re-fired into a limiter that would count it.
+- **The 429 copy path, pinned end to end** — the error object surviving the query hook with its
+  `code` intact, and the specific words reaching the rendered surface, each proven by a test that
+  reddens if the object is flattened or the copy lookup collapses.

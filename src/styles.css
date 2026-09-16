@@ -466,8 +466,8 @@ input[type='search'] {
 }
 
 /* ---------- grid + cards ----------
-   Structure is intentionally light here; the grid workstream refines card
-   internals on top of these tokens and the .status chip. */
+   Structure is intentionally light here; card internals are refined on top of
+   these tokens and the .status chip. */
 
 .grid {
   flex: 1;
@@ -493,10 +493,10 @@ input[type='search'] {
 .card:hover {
   box-shadow: var(--shadow-1);
 }
-/* Selection, focus and active-card cues are owned by the grid workstream so
-   selection and focus stay distinct (a colour-only selection ring would collide
-   with the icon+label status channel). It styles .card--selected / focus /
-   active on top of these tokens. */
+/* Selection, focus and active-card cues live with the card styling so selection
+   and focus stay distinct (a colour-only selection ring would collide with the
+   icon+label status channel); .card--selected / focus / active build on top of
+   these tokens. */
 .card__thumb {
   display: block;
   width: 100%;
@@ -522,8 +522,8 @@ input[type='search'] {
   accent-color: var(--accent);
 }
 
-/* legacy status pill retinted onto the status tokens for coherence until the
-   grid workstream adopts the .status chip */
+/* legacy status pill retinted onto the status tokens for coherence until cards
+   adopt the .status chip */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -632,5 +632,130 @@ input[type='search'] {
   }
   .search {
     max-width: none;
+  }
+}
+
+/* ---------- virtualised grid (Task 2/5) ----------
+   The card is a FIXED-height flex row so every virtual row is exactly ROW_HEIGHT
+   (104px in AssetGrid.tsx); real rows replace skeleton rows with zero layout
+   shift. Selection is a STRUCTURAL cue (border + inset ring + checkbox), kept
+   distinct from focus (:focus-visible outline) and from the StatusChip's colour
+   so no two colour-coded meanings compete on one surface. */
+.grid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+.grid-inner {
+  width: 100%;
+}
+.grid-row {
+  display: grid;
+  gap: var(--s3);
+  align-items: start;
+  padding: 0 var(--s4);
+  box-sizing: border-box;
+}
+.grid-row--skeletons {
+  position: relative;
+  padding-top: var(--s4);
+}
+
+/* Override the gallery card into a compact fixed-height row for virtualisation. */
+.card {
+  display: flex;
+  align-items: stretch;
+  height: 96px;
+  gap: var(--s3);
+}
+.card__thumb {
+  /* Narrower than the row is tall: a 96px-square thumbnail took 43% of the card
+     and starved the name. 72px still identifies the asset (object-fit: cover, so
+     no distortion) while returning that width to the name beside it. */
+  width: 72px;
+  height: 96px;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+  border-right: 1px solid var(--line);
+}
+.card__thumb--placeholder {
+  background: var(--surface-sunken);
+}
+.card__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--s2) var(--s3) var(--s2) 0;
+}
+.card__name {
+  /* The primary identifier must never be the flex item that loses: in a
+     fixed-height column, an unprotected name flex-shrinks to 0 and its own
+     overflow:hidden then clips it to nothing (silently). Pin it to one line and
+     forbid it shrinking; if anything truncates it is the metadata, never this. */
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Metadata is a single line of secondary info; scoped to the card (NOT global
+   .muted, which wraps freely in the detail panel) so it can never wrap to the
+   three lines that consumed the fixed 96px row and starved the name. */
+.card__body .muted {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card__check {
+  top: var(--s2);
+  left: var(--s2);
+  z-index: 1;
+}
+
+/* Selection: structural, not colour-only. Solid accent border + inset ring +
+   a faint tint; the checkbox is the definitive non-visual cue. */
+.card--selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-soft);
+}
+/* Active (open in the panel): a left accent bar — a different shape from the
+   selection ring so the two never read as the same state. */
+.card--active {
+  box-shadow: inset 3px 0 0 0 var(--line-strong);
+}
+.card--selected.card--active {
+  box-shadow: inset 0 0 0 2px var(--accent), inset 3px 0 0 0 var(--accent);
+}
+.card--skeleton {
+  border-style: dashed;
+  cursor: default;
+  pointer-events: none;
+  background: var(--surface-soft);
+}
+
+/* Incremental pagination affordances (grid-owned; the shell owns whole-view states). */
+.grid-more {
+  padding: var(--s3) var(--s4);
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.grid-more--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  color: var(--danger-ink);
+  background: var(--danger-tint);
+  border-top: 1px solid var(--danger-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
   }
 }
