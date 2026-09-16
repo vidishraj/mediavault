@@ -64,7 +64,7 @@ describe('useBulkStatus', () => {
 
     // successes keep the new status; failures reverted
     expect(statusById(qc)).toMatchObject({ a: 'approved', b: 'draft', c: 'draft' });
-    // MAJOR 1: the succeeded asset's authoritative version is written to the detail cache
+    // the succeeded asset's authoritative version is written to the detail cache
     expect(qc.getQueryData<Asset>(['asset', 'a'])?.version).toBe(2);
 
     // Run 2: retry ONLY the retryable subset
@@ -77,7 +77,7 @@ describe('useBulkStatus', () => {
     act(() => result.current.retryRetryable());
     await waitFor(() => expect(result.current.outcome!.succeededIds).toContain('c'));
 
-    // MAJOR 2 regression: the legal_hold failure is STILL reported after the retry
+    // regression guard: the legal_hold failure is STILL reported after the retry
     expect(result.current.outcome!.permanentIds).toEqual(['b']);
     expect(result.current.outcome!.retryableIds).toEqual([]);
     expect(result.current.outcome!.succeededIds.sort()).toEqual(['a', 'c']);

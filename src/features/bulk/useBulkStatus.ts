@@ -144,8 +144,8 @@ export function useBulkStatus(selectedIds: ReadonlySet<string>) {
       queryClient.setQueriesData<AssetsCache>({ queryKey: ASSETS_QUERY_KEY }, (data) =>
         data ? replaceAssets(rollbackFailures(data, context.snapshot, failed), succeededAssets) : data,
       );
-      // detail: reconcile any open panel for a succeeded asset (MAJOR 1 — else a
-      // stale detail version manufactures a 409 on the next single edit).
+      // detail: reconcile any open panel for a succeeded asset, else a stale
+      // detail version manufactures a version conflict on the next single edit.
       for (const [id, asset] of succeededAssets) {
         queryClient.setQueryData<Asset>(assetKey(id), asset);
       }
