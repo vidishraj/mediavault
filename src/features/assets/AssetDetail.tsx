@@ -36,23 +36,22 @@ export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescr
 
   const asset = query.data;
 
+  function saved(updated: Asset) {
+    setPendingPatch(null);
+    onSaved?.(updated);
+  }
+
   function applyStatus(status: AssetStatus) {
     if (!asset) return;
     const patch: AssetPatch = { status };
     setPendingPatch(patch);
-    update.mutate(
-      { version: asset.version, patch },
-      { onSuccess: (updated) => onSaved?.(updated) },
-    );
+    update.mutate({ version: asset.version, patch }, { onSuccess: saved });
   }
 
   // Keep-mine: re-apply the user's edit against the freshly refetched version.
   function keepMine() {
     if (!asset || !pendingPatch) return;
-    update.mutate(
-      { version: asset.version, patch: pendingPatch },
-      { onSuccess: (updated) => onSaved?.(updated) },
-    );
+    update.mutate({ version: asset.version, patch: pendingPatch }, { onSuccess: saved });
   }
 
   function takeTheirs() {
