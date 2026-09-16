@@ -8,7 +8,11 @@ import { useRovingGridFocus } from './useRovingGridFocus';
 
 /** Must match the .card height in CSS so real rows replace skeletons with no reflow. */
 const ROW_HEIGHT = 104;
-const MIN_CARD_WIDTH = 240;
+// Wider minimum column so the asset name — the primary identifier when scanning —
+// keeps enough room to render its distinguishing suffix beside the thumbnail
+// rather than truncating it. Fewer, wider columns is a deliberate trade of density
+// for legibility; virtualisation keeps the extra rows free to scroll.
+const MIN_CARD_WIDTH = 320;
 
 export interface AssetGridProps {
   assets: Asset[];
