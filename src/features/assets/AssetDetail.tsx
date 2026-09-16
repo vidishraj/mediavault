@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getAsset, thumbnailUrl, updateAsset } from '@/api/client';
 import { formatBytes, formatDate, formatDuration, statusLabel } from '@/lib/format';
 import type { Asset, AssetStatus } from '@/lib/types';
@@ -19,6 +19,7 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
   const [asset, setAsset] = useState<Asset | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setAsset(null);
@@ -27,6 +28,22 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
       .then(setAsset)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Load failed'));
   }, [id]);
+
+  // Focus management: move focus into the panel on open and restore it to the
+  // card that opened it on close. Non-modal side panel, so focus is NOT trapped
+  // (the user can Tab out to the grid); Escape closes.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+    }
+  }
 
   async function setStatus(status: AssetStatus) {
     if (!asset) return;
@@ -44,10 +61,17 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
   }
 
   return (
-    <aside className="panel">
+    <aside
+      className="panel"
+      role="dialog"
+      aria-labelledby="asset-detail-heading"
+      onKeyDown={onKeyDown}
+    >
       <div className="panel__head">
-        <h2>Asset detail</h2>
-        <button onClick={onClose}>Close</button>
+        <h2 id="asset-detail-heading">Asset detail</h2>
+        <button ref={closeRef} onClick={onClose}>
+          Close
+        </button>
       </div>
 
       {error && <p className="error">{error}</p>}
