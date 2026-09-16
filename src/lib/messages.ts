@@ -54,9 +54,24 @@ const MESSAGES: Record<string, UserMessage> = {
     tone: 'warn',
     retryable: true,
   },
+  // The transport reports an unreachable server as network_error (status 0);
+  // to the user that is indistinguishable from being offline.
+  network_error: {
+    title: 'Cannot reach MediaVault',
+    body: 'Check your connection. We will retry automatically.',
+    tone: 'warn',
+    retryable: true,
+  },
 
   // The world changed under us: recoverable, but not by blind retry.
   stale_cursor: {
+    title: 'The list moved on',
+    body: 'We refreshed it so you are seeing current results.',
+    tone: 'info',
+    retryable: false,
+  },
+  // Same situation as stale_cursor from the user's point of view.
+  bad_cursor: {
     title: 'The list moved on',
     body: 'We refreshed it so you are seeing current results.',
     tone: 'info',
@@ -140,6 +155,26 @@ export function messageForError(code?: string | null, httpStatus?: number): User
     if (byStatus) return byStatus;
   }
   return UNKNOWN;
+}
+
+/**
+ * The structure the data layer's ApiError exposes (src/api/errors.ts). Kept as a
+ * minimal structural type so this copy module has no import dependency on the
+ * transport; ApiError satisfies it.
+ */
+export interface ApiErrorLike {
+  code?: string | null;
+  status?: number;
+}
+
+/**
+ * Canonical mapping from a typed transport error to user copy. Branches on the
+ * structured `code` (falling back to HTTP status), never on message text.
+ * Returns null for a user-cancelled request ('aborted'), which must stay silent.
+ */
+export function messageForApiError(err: ApiErrorLike): UserMessage | null {
+  if (err.code === 'aborted') return null;
+  return messageForError(err.code ?? undefined, err.status);
 }
 
 /**
