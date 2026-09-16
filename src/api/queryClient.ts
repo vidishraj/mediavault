@@ -6,9 +6,17 @@
  * violates Task 4 — it would retry a version conflict and a validation failure,
  * burning rate-limit budget on requests that can never succeed. So retry here is
  * the STRUCTURAL predicate `isRetryable` (code-based), and the delay is the
- * shared jittered/`Retry-After`-honouring backoff. RQ is the single retry
- * executor for all queries and mutations; the client methods do not retry
- * themselves, so attempts are never multiplied across two layers.
+ * shared jittered/`Retry-After`-honouring backoff.
+ *
+ * Retry ownership, stated precisely because the two layers must not multiply:
+ *   - SINGLE-REQUEST client methods (listAssets, getAsset, updateAsset) do NOT
+ *     retry themselves; RQ is their retry executor via the predicate above.
+ *   - CHUNKED helpers (getAssetsByIds, bulkSetStatus) OWN their retry at the
+ *     chunk level — re-requesting only the failed chunk is far better than
+ *     re-running the whole fan-out — so a caller wiring them into RQ MUST set
+ *     `retry: false` on that query/mutation. That is enforced structurally at
+ *     each such call site, not by memory, so attempts can never stack to
+ *     3 (transport) x 3 (RQ) = 9 against the rate limit.
  *
  * Offline: RQ's `onlineManager` is pointed at our own online observable, so when
  * the wifi drops queries PAUSE (stop hammering) and RESUME on reconnect, and the
@@ -27,6 +35,15 @@ onlineManager.setEventListener((setOnline) => {
   setOnline(onlineState.isOnline);
   return unsubscribe;
 });
+
+/**
+ * Spread into ANY useQuery/useMutation whose fn calls a chunked helper
+ * (getAssetsByIds, bulkSetStatus). Those helpers own chunk-level retry, so
+ * turning RQ retry off here makes double-retry (3 x 3 = 9) structurally
+ * impossible — the guarantee is in code at the call site, not a comment that can
+ * drift. Not spreading it is the bug; the name makes forgetting it visible.
+ */
+export const chunkedHelperOptions = { retry: false } as const;
 
 const asApiError = (error: unknown): ApiError | null => (error instanceof ApiError ? error : null);
 

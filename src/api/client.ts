@@ -2,8 +2,12 @@
  * Typed API client built on the transport layer.
  *
  * Every method takes an `AbortSignal` so callers can genuinely cancel. GETs are
- * de-duplicated and never retried here (TanStack Query owns retry for queries).
- * The batch and bulk endpoints are chunked to their id caps and run with bounded
+ * de-duplicated. Retry ownership is split on purpose: SINGLE-REQUEST methods
+ * (listAssets, getAsset, updateAsset) do not retry here — TanStack Query owns
+ * their retry. The CHUNKED helpers (getAssetsByIds, bulkSetStatus) own their
+ * retry at the chunk level (re-request only the failed chunk), so a caller MUST
+ * wire them with `retry: false` in RQ or attempts would multiply against the
+ * rate limit. Batch and bulk are chunked to their id caps and run with bounded
  * concurrency so a large selection cannot fan out into a request storm.
  */
 
