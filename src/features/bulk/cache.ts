@@ -42,6 +42,16 @@ export function snapshotStatuses(data: AssetsCache, ids: ReadonlySet<string>): M
   return snapshot;
 }
 
+/**
+ * Replace whole assets by id with the authoritative versions the server
+ * returned (the 207's `results[].asset`). This reconciles the incremented
+ * `version` into the cache, so a later single edit does not PATCH a stale
+ * version and manufacture a 409.
+ */
+export function replaceAssets(data: AssetsCache, byId: ReadonlyMap<string, Asset>): AssetsCache {
+  return mapItems(data, (asset) => byId.get(asset.id) ?? asset);
+}
+
 /** Restore ONLY the failed ids to their snapshotted status; leave successes. */
 export function rollbackFailures(
   data: AssetsCache,
