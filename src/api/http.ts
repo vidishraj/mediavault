@@ -14,6 +14,7 @@
  */
 
 import { apiErrorFromResponse, apiErrorFromThrown } from './errors';
+import { rateLimiter } from './rateLimiter';
 import { DEFAULT_RETRY, type RetryConfig, withRetry } from './retry';
 
 export interface RequestOptions {
@@ -44,6 +45,10 @@ async function parseJson(response: Response): Promise<unknown> {
 async function doFetch<T>(path: string, method: string, body: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
+    // Acquire from the client-wide budget BEFORE fetching. This is inside the
+    // per-attempt path, so a retry also spends a token — matching how the server
+    // counts, and preventing a retry storm from exceeding the ceiling.
+    await rateLimiter.acquire(signal);
     response = await fetch(path, {
       method,
       signal,
@@ -51,7 +56,7 @@ async function doFetch<T>(path: string, method: string, body: unknown, signal?: 
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (thrown) {
-    // fetch rejects on network failure or abort; normalise both.
+    // fetch (or an aborted token wait) rejects on network failure or abort.
     throw apiErrorFromThrown(thrown);
   }
   if (!response.ok) {
@@ -96,7 +101,13 @@ function deduped<T>(key: string, factory: (signal: AbortSignal) => Promise<T>, c
     let settled = false;
     const detach = () => {
       current.refs -= 1;
-      if (current.refs <= 0) current.controller.abort();
+      if (current.refs <= 0) {
+        current.controller.abort();
+        // Evict synchronously so a caller arriving in the microtask window
+        // between this abort and the promise's .finally cannot attach to a dead
+        // flight and inherit its `aborted` rejection.
+        if (flights.get(key) === (current as Flight<unknown>)) flights.delete(key);
+      }
     };
     const onAbort = () => {
       if (settled) return;

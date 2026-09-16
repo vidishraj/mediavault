@@ -35,8 +35,20 @@ const RETRYABLE_CODES: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   'network_error',
 ]);
 
+/**
+ * Transient HTTP statuses used only as a FALLBACK when the body carried no
+ * modelled code. Against the frozen server every failure has a code, so this is
+ * belt-and-braces: it keeps an unparseable 503 from being treated as terminal.
+ */
+const TRANSIENT_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504]);
+
 export function isRetryable(error: unknown): boolean {
-  return error instanceof ApiError && RETRYABLE_CODES.has(error.code);
+  if (!(error instanceof ApiError)) return false;
+  if (RETRYABLE_CODES.has(error.code)) return true;
+  // Only when the code is unknown do we fall back to the status; an explicit
+  // terminal code (400/409/422) is always respected.
+  if (error.code === 'unknown') return TRANSIENT_STATUSES.has(error.status);
+  return false;
 }
 
 export interface RetryConfig {
@@ -80,7 +92,7 @@ export function shouldRetry(error: unknown, attempt: number, config: RetryConfig
 }
 
 /** Reject-on-abort sleep, so a cancelled request stops waiting immediately. */
-function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+export function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new DOMException('Aborted', 'AbortError'));
