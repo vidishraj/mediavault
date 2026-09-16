@@ -1,57 +1,109 @@
-import { useEffect, useState } from 'react';
-import { getAsset, thumbnailUrl, updateAsset } from '@/api/client';
+import { useEffect, useRef, useState } from 'react';
+
+import { thumbnailUrl } from '@/api/client';
 import { formatBytes, formatDate, formatDuration, statusLabel } from '@/lib/format';
 import type { Asset, AssetStatus } from '@/lib/types';
+import { useAsset } from './useAsset';
+import { type AssetPatch, useUpdateAsset } from './useUpdateAsset';
 
 const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
 
 interface Props {
   id: string;
   onClose: () => void;
-  onSaved: (asset: Asset) => void;
+  /** Kept for the App contract; the cache patch drives the grid, so this is a no-op there. */
+  onSaved?: (asset: Asset) => void;
+  /**
+   * User-facing copy for an error. Injected by App (canonical:
+   * `messageForApiError` in `@/lib/messages`); the default is a minimal,
+   * non-leaking fallback so this component is self-contained and never shows a
+   * raw server string.
+   */
+  describeError?: (error: unknown) => string;
 }
 
+const defaultDescribe = () => 'Something went wrong. Please try again.';
+
 /**
- * Baseline detail panel. Loads on open, saves with no optimistic update,
- * surfaces failures as raw strings, and does nothing about focus.
+ * Detail panel on TanStack Query. Status edits are optimistic (via useUpdateAsset)
+ * and a 409 version conflict is surfaced as a reconciliation prompt rather than a
+ * silent discard. Focus management and the 404-thumbnail placeholder belong to
+ * other tasks and are intentionally not added here.
  */
-export function AssetDetail({ id, onClose, onSaved }: Props) {
-  const [asset, setAsset] = useState<Asset | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescribe }: Props) {
+  const query = useAsset(id);
+  const update = useUpdateAsset(id);
+  const [pendingPatch, setPendingPatch] = useState<AssetPatch | null>(null);
 
+  const asset = query.data;
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Focus management: move focus into the panel on open and restore it to the
+  // card that opened it on close. Non-modal side panel, so focus is NOT trapped
+  // (the user can Tab out to the grid); Escape closes.
   useEffect(() => {
-    setAsset(null);
-    setError(null);
-    getAsset(id)
-      .then(setAsset)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Load failed'));
-  }, [id]);
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
 
-  async function setStatus(status: AssetStatus) {
-    if (!asset) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updateAsset(asset.id, asset.version, { status });
-      setAsset(updated);
-      onSaved(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
-    } finally {
-      setSaving(false);
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
     }
   }
 
+  function saved(updated: Asset) {
+    setPendingPatch(null);
+    onSaved?.(updated);
+  }
+
+  function applyStatus(status: AssetStatus) {
+    if (!asset) return;
+    const patch: AssetPatch = { status };
+    setPendingPatch(patch);
+    update.mutate({ version: asset.version, patch }, { onSuccess: saved });
+  }
+
+  // Keep-mine: re-apply the user's edit against the freshly refetched version.
+  function keepMine() {
+    if (!asset || !pendingPatch) return;
+    update.mutate({ version: asset.version, patch: pendingPatch }, { onSuccess: saved });
+  }
+
+  function takeTheirs() {
+    setPendingPatch(null);
+    update.reset();
+  }
+
   return (
-    <aside className="panel">
+    <aside
+      className="panel"
+      role="dialog"
+      aria-labelledby="asset-detail-heading"
+      onKeyDown={onKeyDown}
+    >
       <div className="panel__head">
-        <h2>Asset detail</h2>
-        <button onClick={onClose}>Close</button>
+        <h2 id="asset-detail-heading">Asset detail</h2>
+        <button ref={closeRef} onClick={onClose}>
+          Close
+        </button>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {!asset && !error && <p className="muted">Loading…</p>}
+      {query.isLoading && <p className="muted">Loading…</p>}
+      {query.isError && !asset && <p className="error">{describeError(query.error)}</p>}
+
+      {update.conflict && (
+        <div className="conflict" role="alert">
+          <p>This asset changed since you opened it. It is now “{asset ? statusLabel(asset.status) : '—'}”.</p>
+          <div className="row">
+            <button onClick={keepMine}>Apply my change anyway</button>
+            <button onClick={takeTheirs}>Keep the current version</button>
+          </div>
+        </div>
+      )}
+      {update.isError && !update.conflict && <p className="error">{describeError(update.error)}</p>}
 
       {asset && (
         <div className="panel__body">
@@ -99,8 +151,8 @@ export function AssetDetail({ id, onClose, onSaved }: Props) {
             {STATUSES.map((status) => (
               <button
                 key={status}
-                disabled={saving || status === asset.status}
-                onClick={() => setStatus(status)}
+                disabled={update.isPending || status === asset.status}
+                onClick={() => applyStatus(status)}
               >
                 {statusLabel(status)}
               </button>

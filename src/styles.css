@@ -1,11 +1,85 @@
+/*
+ * MediaVault interface system.
+ *
+ * A small set of decisions applied consistently, not a pile of one-off values.
+ * The intent is meant to be readable from the tokens: one neutral ink ramp, one
+ * accent, four status hues that run as a lifecycle, a 4px spacing step, and a
+ * short type scale. Restraint over decoration is deliberate.
+ *
+ * All text and icon colours are verified against WCAG 2.1 AA with
+ * tools/contrast-check.mjs; ratios are recorded in SUBMISSION.md. Light theme
+ * only, by scope.
+ */
+
 :root {
-  --ink: #1b1d21;
-  --ink-soft: #62676f;
-  --line: #d9dce1;
+  /* Neutral ink ramp (text on light surfaces). */
+  --ink: #1b1d21; /* primary text            16.9:1 on white */
+  --ink-soft: #585d66; /* secondary text      6.6:1 on white */
+  --ink-mute: #6f757e; /* tertiary / large    4.6:1 on white */
+
+  /* Surfaces, lightest to most sunken. */
   --bg: #ffffff;
-  --bg-soft: #f5f6f8;
-  --accent: #2b5fd9;
-  --danger: #a5301f;
+  --surface: #ffffff;
+  --surface-soft: #f4f6f9;
+  --surface-sunken: #eceff3;
+
+  /* Lines: a decorative hairline, and a stronger one for control boundaries
+     that must be perceivable (>= 3:1). */
+  --line: #dfe2e7;
+  --line-strong: #838a93;
+
+  /* Single accent, used for focus, selection and primary actions. */
+  --accent: #2350c9; /* 6.9:1 with white text */
+  --accent-ink: #ffffff;
+  --accent-soft: #eaeffb;
+
+  /* Danger, for destructive / failed states. */
+  --danger: #a5301f; /* 6.9:1 on white */
+  --danger-ink: #8f2b1c; /* on the danger tint */
+  --danger-tint: #fdecea;
+  --danger-line: #f0c8c2;
+
+  /* Status lifecycle: draft -> in_review -> approved -> archived. Warms from a
+     neutral start to green, then cools to a retired slate, so the set reads as a
+     progression. Each has a pale tint (chip background) and an ink (the icon /
+     accent); labels are always --ink for guaranteed contrast on the tint. */
+  --status-draft-tint: #eef1f5;
+  --status-draft-ink: #515a67;
+  --status-review-tint: #fdf3e0;
+  --status-review-ink: #8a5a00;
+  --status-approved-tint: #e6f4ea;
+  --status-approved-ink: #1f7a43;
+  --status-archived-tint: #edeef1;
+  --status-archived-ink: #5b626c;
+
+  /* Spacing step is 4px; everything is a multiple so rhythm stays consistent. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  /* Type scale. */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+
+  /* Radii and elevation. */
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(20, 22, 26, 0.06), 0 2px 8px rgba(20, 22, 26, 0.05);
+  --shadow-2: 0 6px 24px rgba(20, 22, 26, 0.14);
+
+  /* Consistent control height for inputs, selects and buttons. */
+  --control-h: 34px;
+
   color-scheme: light;
 }
 
@@ -15,26 +89,55 @@
 
 body {
   margin: 0;
-  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font:
+    var(--fs-base) / 1.5 system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   color: var(--ink);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
 h1 {
-  font-size: 18px;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
   margin: 0;
 }
 h2 {
-  font-size: 16px;
+  font-size: var(--fs-md);
   margin: 0;
 }
 h3 {
-  font-size: 15px;
-  margin: 12px 0 4px;
+  font-size: var(--fs-base);
+  margin: var(--s3) 0 var(--s1);
 }
 p {
-  margin: 4px 0;
+  margin: var(--s1) 0;
 }
+
+.muted {
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+}
+
+/* Visually hidden but available to assistive tech (e.g. the status "step N of
+   4" lifecycle cue). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- controls ---------- */
 
 button,
 select,
@@ -44,84 +147,109 @@ input {
 }
 
 button {
-  padding: 5px 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--bg);
+  min-height: var(--control-h);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 button:hover:not(:disabled) {
-  background: var(--bg-soft);
+  background: var(--surface-soft);
 }
 button:disabled {
-  color: var(--ink-soft);
+  color: var(--ink-mute);
+  border-color: var(--line);
   cursor: default;
+}
+
+/* Primary and destructive variants of the same button. */
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #1c44ad;
+  border-color: #1c44ad;
+}
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #ffffff;
+  font-weight: 600;
+}
+.btn-subtle {
+  border-color: transparent;
+  background: transparent;
+}
+.btn-subtle:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+.search,
+select,
+input[type='text'],
+input[type='search'] {
+  min-height: var(--control-h);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.search {
+  flex: 1;
+  max-width: 380px;
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
-.muted {
-  color: var(--ink-soft);
-  font-size: 13px;
-}
+/* ---------- app shell ---------- */
 
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: var(--bg);
 }
 
 .topbar {
   display: flex;
-  gap: 12px;
+  gap: var(--s3);
   align-items: center;
-  padding: 12px 16px;
+  padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
-
-.search {
-  flex: 1;
-  max-width: 380px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+.topbar h1 {
+  margin-right: var(--s2);
 }
 
 .filters {
   display: flex;
-  gap: 16px;
+  gap: var(--s4);
   align-items: center;
-  padding: 10px 16px;
+  padding: var(--s2) var(--s4);
   border-bottom: 1px solid var(--line);
-  background: var(--bg-soft);
+  background: var(--surface-soft);
 }
 .filters label {
   display: inline-flex;
-  gap: 6px;
+  gap: var(--s1);
   align-items: center;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
-
-.bulkbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.notice,
-.error {
-  margin: 0;
-  padding: 8px 16px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--line);
-}
-.error {
-  color: var(--danger);
+.filters .muted {
+  margin-left: auto;
 }
 
 .content {
@@ -130,100 +258,326 @@ button:disabled {
   min-height: 0;
 }
 
+/* ---------- status chip ----------
+   Colour is never the sole signal: an icon (shape) and the text label carry the
+   status, colour only reinforces it. Label text is --ink for AA on every tint. */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: 2px var(--s2) 2px 6px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface-sunken);
+  white-space: nowrap;
+}
+.status__icon {
+  font-size: 11px;
+  line-height: 1;
+}
+.status--draft {
+  background: var(--status-draft-tint);
+}
+.status--draft .status__icon {
+  color: var(--status-draft-ink);
+}
+.status--in_review {
+  background: var(--status-review-tint);
+}
+.status--in_review .status__icon {
+  color: var(--status-review-ink);
+}
+.status--approved {
+  background: var(--status-approved-tint);
+}
+.status--approved .status__icon {
+  color: var(--status-approved-ink);
+}
+.status--archived {
+  background: var(--status-archived-tint);
+}
+.status--archived .status__icon {
+  color: var(--status-archived-ink);
+}
+
+/* ---------- bulk action bar ---------- */
+
+.bulkbar {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-soft);
+}
+.bulkbar__count {
+  font-weight: 600;
+}
+.bulkbar__spacer {
+  flex: 1;
+}
+
+/* ---------- inline banners (notice / error / offline) ----------
+   A thin strip with a tone stripe on the left, an icon, and text. Tone is
+   carried by icon + wording as well as colour. */
+
+.banner {
+  display: flex;
+  gap: var(--s2);
+  align-items: baseline;
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--ink-mute);
+  background: var(--surface-soft);
+}
+.banner__icon {
+  font-size: var(--fs-sm);
+}
+.banner__title {
+  font-weight: 600;
+}
+.banner__body {
+  color: var(--ink-soft);
+}
+.banner--info {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+.banner--warn {
+  border-left-color: var(--status-review-ink);
+  background: var(--status-review-tint);
+}
+.banner--danger {
+  border-left-color: var(--danger);
+  background: var(--danger-tint);
+}
+.banner--danger .banner__title {
+  color: var(--danger-ink);
+}
+.banner__action {
+  margin-left: auto;
+}
+
+/* legacy hooks kept working, mapped onto the banner tones */
+.notice {
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+.error {
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  font-size: var(--fs-sm);
+  color: var(--danger-ink);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--danger);
+  background: var(--danger-tint);
+}
+
+/* ---------- full-area states (empty / error / offline) ----------
+   Centered in the grid area. Icon + title + one line of guidance + an action,
+   so every state says what to do next rather than just what went wrong. */
+
+.state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: var(--s7) var(--s4);
+  text-align: center;
+}
+.state__icon {
+  font-size: 28px;
+  line-height: 1;
+  color: var(--ink-mute);
+}
+.state__title {
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+.state__body {
+  max-width: 42ch;
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+}
+.state__action {
+  margin-top: var(--s2);
+}
+.state--error .state__icon {
+  color: var(--danger);
+}
+
+/* ---------- loading skeleton ----------
+   A calm shimmer rather than a spinner, so a slow, out-of-order API reads as
+   "loading" instead of "broken". Respects reduced-motion. */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border-radius: var(--r-sm);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6),
+    transparent
+  );
+  animation: skeleton-sweep 1.3s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+.skel-line {
+  height: 10px;
+  border-radius: var(--r-sm);
+}
+.skel-line--name {
+  width: 70%;
+  margin: var(--s1) 0 6px;
+}
+.skel-line--meta {
+  width: 40%;
+  height: 16px;
+  border-radius: var(--r-pill);
+}
+
+/* ---------- grid + cards ----------
+   Structure is intentionally light here; card internals are refined on top of
+   these tokens and the .status chip. */
+
 .grid {
   flex: 1;
   overflow: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
-  padding: 16px;
+  gap: var(--s3);
+  padding: var(--s4);
   align-content: start;
 }
 
 .card {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface);
   cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
-.card--selected {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+.card:hover {
+  box-shadow: var(--shadow-1);
 }
-.card--active {
-  border-color: var(--ink);
-}
+/* Selection, focus and active-card cues live with the card styling so selection
+   and focus stay distinct (a colour-only selection ring would collide with the
+   icon+label status channel); .card--selected / focus / active build on top of
+   these tokens. */
 .card__thumb {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
-  background: var(--bg-soft);
+  background: var(--surface-sunken);
 }
 .card__body {
-  padding: 8px 10px 10px;
+  padding: var(--s2) var(--s3) var(--s3);
 }
 .card__name {
   margin: 0 0 2px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.35;
 }
 .card__check {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: var(--s2);
+  left: var(--s2);
   width: 18px;
   height: 18px;
+  accent-color: var(--accent);
 }
 
+/* legacy status pill retinted onto the status tokens for coherence until cards
+   adopt the .status chip */
 .pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
   margin-top: 6px;
-  padding: 1px 7px;
-  border-radius: 10px;
-  font-size: 12px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
+  padding: 1px var(--s2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-sunken);
 }
-.pill--approved {
-  background: #e6f4ea;
-  border-color: #b7dfc4;
+.pill--draft {
+  background: var(--status-draft-tint);
 }
 .pill--in_review {
-  background: #fff4e0;
-  border-color: #ecd3a2;
+  background: var(--status-review-tint);
+}
+.pill--approved {
+  background: var(--status-approved-tint);
 }
 .pill--archived {
-  color: var(--ink-soft);
+  background: var(--status-archived-tint);
 }
+
+/* ---------- detail panel ---------- */
 
 .panel {
   width: 340px;
   flex-shrink: 0;
   border-left: 1px solid var(--line);
   overflow: auto;
-  padding: 12px 16px 32px;
+  padding: var(--s3) var(--s4) var(--s6);
+  background: var(--surface);
 }
 .panel__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--s2);
 }
 .panel__thumb {
   width: 100%;
-  border-radius: 6px;
-  margin-top: 12px;
-  background: var(--bg-soft);
+  border-radius: var(--r-md);
+  margin-top: var(--s3);
+  background: var(--surface-sunken);
 }
 
 .facts {
   display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 2px 8px;
-  margin: 8px 0;
-  font-size: 13px;
+  grid-template-columns: 92px 1fr;
+  gap: 2px var(--s2);
+  margin: var(--s2) 0;
+  font-size: var(--fs-sm);
 }
 .facts dt {
   color: var(--ink-soft);
@@ -235,29 +589,34 @@ button:disabled {
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--s1);
   padding: 0;
-  margin: 8px 0;
+  margin: var(--s2) 0;
   list-style: none;
 }
 .tags li {
-  font-size: 12px;
-  padding: 1px 7px;
+  font-size: var(--fs-xs);
+  padding: 1px var(--s2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-pill);
+  color: var(--ink-soft);
 }
 
 .row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--s2);
 }
 
 .empty {
-  padding: 48px 16px;
+  padding: var(--s7) var(--s4);
   text-align: center;
   flex: 1;
+  color: var(--ink-soft);
 }
+
+/* ---------- narrow window ----------
+   Down to a small width without unusable overlap; full mobile is out of scope. */
 
 @media (max-width: 720px) {
   .content {
@@ -267,5 +626,136 @@ button:disabled {
     width: 100%;
     border-left: none;
     border-top: 1px solid var(--line);
+  }
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .search {
+    max-width: none;
+  }
+}
+
+/* ---------- virtualised grid (Task 2/5) ----------
+   The card is a FIXED-height flex row so every virtual row is exactly ROW_HEIGHT
+   (104px in AssetGrid.tsx); real rows replace skeleton rows with zero layout
+   shift. Selection is a STRUCTURAL cue (border + inset ring + checkbox), kept
+   distinct from focus (:focus-visible outline) and from the StatusChip's colour
+   so no two colour-coded meanings compete on one surface. */
+.grid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+.grid-inner {
+  width: 100%;
+}
+.grid-row {
+  display: grid;
+  gap: var(--s3);
+  align-items: start;
+  padding: 0 var(--s4);
+  box-sizing: border-box;
+}
+.grid-row--skeletons {
+  position: relative;
+  padding-top: var(--s4);
+}
+
+/* Override the gallery card into a compact fixed-height row for virtualisation. */
+.card {
+  display: flex;
+  align-items: stretch;
+  height: 96px;
+  gap: var(--s3);
+}
+.card__thumb {
+  /* Narrower than the row is tall: a 96px-square thumbnail took 43% of the card
+     and starved the name. 72px still identifies the asset (object-fit: cover, so
+     no distortion) while returning that width to the name beside it. */
+  width: 72px;
+  height: 96px;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+  border-right: 1px solid var(--line);
+}
+.card__thumb--placeholder {
+  background: var(--surface-sunken);
+}
+.card__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--s2) var(--s3) var(--s2) 0;
+}
+.card__name {
+  /* The primary identifier must never be the flex item that loses: in a
+     fixed-height column, an unprotected name flex-shrinks to 0 and its own
+     overflow:hidden then clips it to nothing (silently). Pin it to one line and
+     forbid it shrinking; if anything truncates it is the metadata, never this. */
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Metadata is a single line of secondary info; scoped to the card (NOT global
+   .muted, which wraps freely in the detail panel) so it can never wrap to the
+   three lines that consumed the fixed 96px row and starved the name. */
+.card__body .muted {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card__check {
+  top: var(--s2);
+  left: var(--s2);
+  z-index: 1;
+}
+
+/* Selection: structural, not colour-only. Solid accent border + inset ring +
+   a faint tint; the checkbox is the definitive non-visual cue. */
+.card--selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-soft);
+}
+/* Active (open in the panel): a left accent bar — a different shape from the
+   selection ring so the two never read as the same state. */
+.card--active {
+  box-shadow: inset 3px 0 0 0 var(--line-strong);
+}
+.card--selected.card--active {
+  box-shadow: inset 0 0 0 2px var(--accent), inset 3px 0 0 0 var(--accent);
+}
+.card--skeleton {
+  border-style: dashed;
+  cursor: default;
+  pointer-events: none;
+  background: var(--surface-soft);
+}
+
+/* Incremental pagination affordances (grid-owned; the shell owns whole-view states). */
+.grid-more {
+  padding: var(--s3) var(--s4);
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.grid-more--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  color: var(--danger-ink);
+  background: var(--danger-tint);
+  border-top: 1px solid var(--danger-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
   }
 }
