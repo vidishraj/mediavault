@@ -214,6 +214,19 @@ Fill in real measurements, not estimates. Say which machine and browser.
 
 What was the actual bottleneck, and how did you find it?
 
+Two, and both were **measured before any fix existed**, not inferred from reading the code:
+
+- **The search race** — caught at the network layer against the untouched baseline. Short prefixes
+  are deliberately slower, so the earlier request resolves last: on the deploy, `q=c` returns 10,681
+  matches at 1.09 s while `q=campaign` returns 2,248 at 0.21 s — a *larger*, staler count visibly
+  overwriting the finished one. Capturing it in `notes/baseline/` first is what makes the
+  before/after real: once the fix lands, the "before" is gone.
+- **The un-virtualised grid** — found by counting DOM nodes, not by it feeling slow: the baseline
+  renders one node per row, so the count scaled with scroll depth rather than the viewport (after
+  virtualisation, 60 gridcells at 5,000 loaded).
+
+Neither was a hunch from reading the source; each is a measurement I can name and re-run.
+
 ---
 
 ## Accessibility
