@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { chunk, mapWithConcurrency } from './concurrency';
 import { ApiError, apiErrorFromResponse, apiErrorFromThrown, parseRetryAfter } from './errors';
+import { RollingRateLimiter } from './rateLimiter';
 import { inFlightCount, request } from './http';
 import { computeDelayMs, DEFAULT_RETRY, isRetryable, shouldRetry, withRetry } from './retry';
 
@@ -159,5 +160,82 @@ describe('in-flight de-duplication', () => {
     vi.stubGlobal('fetch', fetchMock);
     await Promise.all([request('/api/assets?q=x'), request('/api/assets?q=y')]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('one caller aborting leaves the shared flight alive for the others', async () => {
+    let resolveFetch!: (r: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((res) => {
+      resolveFetch = res;
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctrlA = new AbortController();
+    const a = request('/api/assets?q=z', { signal: ctrlA.signal });
+    const b = request('/api/assets?q=z'); // attaches to the same flight
+    ctrlA.abort(); // A detaches; B is still interested
+
+    await expect(a).rejects.toMatchObject({ code: 'aborted' });
+    resolveFetch(json(200, { shared: true }));
+    await expect(b).resolves.toEqual({ shared: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never a second flight
+    expect(inFlightCount()).toBe(0); // and no leak
+  });
+});
+
+describe('abort cancels a pending backoff', () => {
+  it('does not run the next attempt once aborted mid-backoff', async () => {
+    const ctrl = new AbortController();
+    let attempts = 0;
+    const p = withRetry(
+      async () => {
+        attempts += 1;
+        throw new ApiError({ code: 'upstream_unavailable', status: 503, message: '' });
+      },
+      { ...DEFAULT_RETRY, baseDelayMs: 8000, random: () => 1 }, // long backoff we will interrupt
+      ctrl.signal,
+    );
+    await new Promise((r) => setTimeout(r, 5)); // let the first attempt fail and enter the delay
+    ctrl.abort();
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    expect(attempts).toBe(1); // the second attempt never fired
+  });
+});
+
+describe('unknown-code status fallback', () => {
+  it('retries an unknown code only on a transient status', () => {
+    expect(isRetryable(new ApiError({ code: 'unknown', status: 503, message: '' }))).toBe(true);
+    expect(isRetryable(new ApiError({ code: 'unknown', status: 400, message: '' }))).toBe(false);
+  });
+});
+
+describe('rate limiter — true sliding window, strict > limit', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('80 fit in a window but the 81st waits until the window slides', async () => {
+    vi.useFakeTimers();
+    let now = 9900;
+    const limiter = new RollingRateLimiter(80, 10_000, { now: () => now });
+
+    // 80 grants at t=9900 all succeed
+    for (let i = 0; i < 80; i += 1) await limiter.acquire();
+    expect(limiter.windowCount).toBe(80);
+
+    // At t=10100 all 80 are still inside the trailing 10s window [100, 10100].
+    // A FIXED window would reset and allow this; a sliding window must not.
+    now = 10100;
+    let granted = false;
+    const pending = limiter.acquire().then(() => {
+      granted = true;
+    });
+    await Promise.resolve();
+    expect(granted).toBe(false); // the 81st is refused-by-waiting
+
+    // Slide past the original batch (t - 9900 > 10000) and let the backoff fire.
+    now = 19902;
+    await vi.advanceTimersByTimeAsync(10_000);
+    await pending;
+    expect(granted).toBe(true);
   });
 });
