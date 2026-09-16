@@ -69,11 +69,15 @@ Backoff is exponential with FULL JITTER, a hard cap of 3 attempts, and honours a
 server `Retry-After` as a floor. The rate limit (80 req/10s, retries count) is
 the designed trap, so the policy is built NOT to amplify: capped attempts, jitter
 so concurrent failures do not resynchronise into a second wave, and honouring the
-3s `Retry-After` on a 429 instead of hammering. Rejected: matching on the message
+3s `Retry-After` on a 429 instead of hammering. On top of per-request retry, the
+ceiling is enforced ONCE, centrally: a single client-wide sliding-window limiter
+(~70/10s for headroom) that every request acquires before `fetch`, retries
+included. Per-operation concurrency does not compose — two bulk operations plus
+the list queries share one budget — so the global limiter is where "a retry storm
+makes things worse" is actually prevented. Rejected: matching on the message
 (breaks on a reword), immediate/unbounded retry (turns one 503 into a storm), and
-a proactive client-side token-bucket limiter — deferred, because the
-capped+jittered backoff already prevents amplification for W1; a token bucket is
-the next step only if 429s persist under real load.
+a fixed-window limiter (it would allow 80 at t=9.9s and 80 more at t=10.1s, 160
+in one trailing window, while believing it complied).
 
 **State placement and URL sync**
 
@@ -144,6 +148,12 @@ _(Transport layer — W1. Other tasks may add to this.)_
   reconciliation.
 - **Two different id caps (25 batch, 50 bulk)** force two chunk sizes for no
   client-visible reason; one cap would simplify every caller.
+- **The rate limiter is harsher than documented, and silently so.** API.md says
+  retries count; the server actually records the timestamp BEFORE deciding, so a
+  request that is itself 429'd still consumes a slot — a rejected request keeps
+  the window saturated. A client that reads only the docs will under-provision its
+  own budget. We pace at ~70/10s centrally to stay clear of it; the contract
+  should state that rejected requests count.
 
 ## Anything you would like us to look at
 
