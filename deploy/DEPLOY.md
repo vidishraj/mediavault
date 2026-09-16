@@ -86,12 +86,13 @@ behaviour, virtualisation, bulk/partial-failure handling — the entire user-fac
 **UNEXERCISED on the deployed box.** Do not let a stack of green curls read as "the app works": we have
 evidence the *server* works and the bundle *serves*, which is strictly narrower.
 
-Closing that gap needs a real browser driving the app with chaos on, and **no agent in this fleet has
-one** — so the deployed UI (and the screenshots/video the brief asks for) can only be verified by a
-human. That is a scheduling item for the overseer, not something to paper over with more curl. When the
-grid and search land on `main` and the app becomes worth driving, capture a concrete two-minute path
-(exact URL + a search that reproduces the race + a selection large enough to show partial failure) so
-the on-camera demo is a walk-through, not a hunt.
+Closing that gap needs a real browser driving the app with chaos on — the curl checks here never do.
+So the deployed UI, and the screenshots and video the brief asks for, still need a manual pass in a
+browser: treat "server works + bundle serves" as proven here and "the app works end-to-end" as pending
+that manual check. Once the grid and search are on `main` and the app is worth driving, a concrete
+two-minute path (exact URL + a search that reproduces the short-`q` race + a selection large enough to
+cross the bulk-status id cap and show a partial 207) turns the on-camera demo into a walk-through
+rather than a hunt.
 
 ## API critique surfaced by deploying (belongs in SUBMISSION.md — do NOT edit frozen server/)
 Framing that scores: we did the correct thing on OUR side of the boundary; each finding reduces to a
