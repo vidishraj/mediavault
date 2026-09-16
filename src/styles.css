@@ -236,7 +236,8 @@ input[type='search'] {
 
 .filters {
   display: flex;
-  gap: var(--s4);
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
   align-items: center;
   padding: var(--s2) var(--s4);
   border-bottom: 1px solid var(--line);
@@ -247,6 +248,7 @@ input[type='search'] {
   gap: var(--s1);
   align-items: center;
   font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 .filters .muted {
   margin-left: auto;
@@ -308,6 +310,7 @@ input[type='search'] {
 
 .bulkbar {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--s2);
   align-items: center;
   padding: var(--s2) var(--s4);
