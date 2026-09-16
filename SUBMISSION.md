@@ -421,6 +421,26 @@ _(Transport layer — W1. Other tasks may add to this.)_
   the window saturated. A client that reads only the docs will under-provision its
   own budget. We pace at ~70/10s centrally to stay clear of it; the contract
   should state that rejected requests count.
+- **The rate limiter cannot serve concurrent users behind a proxy — a property of the server, not of
+  any client.** It keys the 80-req/10s window on `req.socket.remoteAddress` and ignores
+  `X-Forwarded-For` (`server/index.mjs`), so behind any reverse proxy every visitor presents as the
+  proxy's address and they all share ONE bucket. We proved it black-box from two hosts with distinct
+  public IPs: host B alone against a quiet bucket succeeded 3/3; host A then fired a bounded
+  90-request burst inside one 10 s window (73×200, 7×503 from chaos, 10×429 once the cap engaged);
+  host B — sending only 2 requests 2.4 s into that same window, with none of its own before — got
+  429/429; after a 13 s drain, B alone succeeded 3/3 again. B fails only in A's shadow, never in
+  isolation, and the exhausting traffic need not even be ours — a second browser tab or anyone else
+  on the API collapses it the same way. So a client-side budget is **necessary but not sufficient**:
+  it governs our own consumption but cannot protect a user from a shared bucket a third party can
+  exhaust. The complete fix takes both — our budget *and* a one-line server change: key the limiter
+  off a trusted `X-Forwarded-For`, falling back to the socket address. Two corroborations from the
+  same run: A's 90 requests came back as exactly 80 admitted (73×200 + 7×503) then 10×429, confirming
+  the strictly `>80` threshold from outside a code reading; and those 7 chaos-503s still consumed
+  slots — the limiter counts every request it sees regardless of outcome, which is precisely the
+  property that makes retry storms self-reinforcing.
+- **The API binds `0.0.0.0` with no bind-host option.** `server.listen(PORT)` exposes it on every
+  interface; a deployable service should accept a bind host (e.g. `HOST` / `127.0.0.1`) so
+  same-origin isolation does not depend on external firewalling.
 
 ## Anything you would like us to look at
 
