@@ -19,7 +19,11 @@ export interface AssetGridProps {
   isFetchNextPageError: boolean;
   nextPageError: unknown;
   onFetchNextPage: () => void;
-  selectedIds: Set<string>;
+  // Read-only by contract: the grid only tests membership (`selectedIds.has`) and
+  // reads `.size`, never mutating. Typing it ReadonlySet lets the caller pass the
+  // selection store's set by reference — preserving the stable identity the card
+  // memoisation depends on — without the type implying the grid may corrupt it.
+  selectedIds: ReadonlySet<string>;
   activeId: string | null;
   onToggleSelect: (id: string) => void;
   onOpen: (id: string) => void;
