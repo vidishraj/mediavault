@@ -216,14 +216,14 @@ senior than a styled one, and it keeps the eye on the content.
   editing - refresh to see it, then reapply your change."; `legal_hold` explains
   that assets on legal hold cannot be archived. Each message also carries a tone
   and whether a retry can help, so the UI can offer the right affordance.
-- **On-device pass and screenshots.** Outstanding, and honestly so. There is no
-  browser in this build environment, so the running application has not been
-  driven end to end by anyone; what is verified is at the unit and jsdom level
-  (the copy layer is unit-pinned, and error-object survival is pinned end to end
-  through the real transport and hook). The render-level assertion lands with the
-  App wiring. Driving the deployed app on a real device, and the screenshots of
-  loading / empty / error / offline / partial bulk failure / the bulk bar, remain
-  a manual step for when the walkthrough is recorded.
+- **On-device pass and screenshots.** Outstanding, and honestly so. The running
+  application has not been driven end to end in a real browser, so the on-device
+  pass and screenshots are to be captured during the recorded walkthrough rather
+  than claimed here. What is verified is at the unit and jsdom level (the copy
+  layer is unit-pinned, and error-object survival is pinned end to end through the
+  real transport and hook). The render-level assertion lands with the App wiring.
+  The remaining screenshots of loading / empty / error / offline / partial bulk
+  failure / the bulk bar are part of that same recorded pass.
 
 ---
 
