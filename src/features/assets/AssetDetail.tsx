@@ -27,8 +27,10 @@ const defaultDescribe = () => 'Something went wrong. Please try again.';
 /**
  * Detail panel on TanStack Query. Status edits are optimistic (via useUpdateAsset)
  * and a 409 version conflict is surfaced as a reconciliation prompt rather than a
- * silent discard. Focus management and the 404-thumbnail placeholder belong to
- * other tasks and are intentionally not added here.
+ * silent discard. Non-modal: focus moves in on open and restores to the opening
+ * card on close, Escape closes it from anywhere, and focus is deliberately NOT
+ * trapped (the brief requires no focus traps). The 404-thumbnail placeholder
+ * belongs to another task and is not added here.
  */
 export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescribe }: Props) {
   const query = useAsset(id);
@@ -38,21 +40,27 @@ export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescr
   const asset = query.data;
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // Focus management: move focus into the panel on open and restore it to the
-  // card that opened it on close. Non-modal side panel, so focus is NOT trapped
-  // (the user can Tab out to the grid); Escape closes.
+  // Focus management (non-modal side panel — the brief requires NO focus traps):
+  // move focus into the panel on open, restore it to the card that opened it on
+  // close. Focus is deliberately NOT trapped; the user can Tab out to the grid.
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     return () => previouslyFocused?.focus?.();
   }, []);
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-    }
-  }
+  // Escape closes the panel from ANYWHERE while it is open. Because the panel is
+  // non-modal, focus may be outside it (the user tabbed back to the grid), and a
+  // panel-scoped handler silently stops firing there — the exact defect this
+  // avoids. A document-level listener, live only while the panel is mounted, keeps
+  // Escape working wherever focus sits.
+  useEffect(() => {
+    const onDocKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onDocKeyDown);
+    return () => document.removeEventListener('keydown', onDocKeyDown);
+  }, [onClose]);
 
   function saved(updated: Asset) {
     setPendingPatch(null);
@@ -80,9 +88,8 @@ export function AssetDetail({ id, onClose, onSaved, describeError = defaultDescr
   return (
     <aside
       className="panel"
-      role="dialog"
+      role="region"
       aria-labelledby="asset-detail-heading"
-      onKeyDown={onKeyDown}
     >
       <div className="panel__head">
         <h2 id="asset-detail-heading">Asset detail</h2>
