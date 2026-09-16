@@ -7,8 +7,8 @@
  * title, an optional line saying what happens next, a tone, and whether the
  * action is worth retrying. Components render these, never the raw code.
  *
- * Coordinated with the error taxonomy from the data layer; keyed on the API
- * error `code`, with HTTP status and the offline case as fallbacks.
+ * Keyed on the structured error `code` from the data layer, with HTTP status
+ * and the offline case as fallbacks.
  */
 
 export type MessageTone = 'info' | 'warn' | 'danger';
@@ -215,9 +215,9 @@ function isApiErrorLike(err: unknown): err is ApiErrorLike {
 /**
  * The safe public entry for a caught `unknown` error (the query layer hands
  * callers `error: unknown`). It narrows STRUCTURALLY rather than by cast, so the
- * obvious-but-wrong `messageForApiError(err as ApiErrorLike)` is not the seam any
- * crew reaches for: a non-ApiError (e.g. a plain Error) does not quietly collapse
- * to the generic message unnoticed. In dev it warns at the boundary so the
+ * obvious-but-wrong `messageForApiError(err as ApiErrorLike)` is not the seam a
+ * caller reaches for: a non-ApiError (e.g. a plain Error) does not quietly
+ * collapse to the generic message unnoticed. In dev it warns at the boundary so the
  * collapse is LOUD rather than silent. Returns null for an aborted (silent)
  * request; a generic string for an unrecognised shape.
  */

@@ -466,8 +466,8 @@ input[type='search'] {
 }
 
 /* ---------- grid + cards ----------
-   Structure is intentionally light here; the grid workstream refines card
-   internals on top of these tokens and the .status chip. */
+   Structure is intentionally light here; card internals are refined on top of
+   these tokens and the .status chip. */
 
 .grid {
   flex: 1;
@@ -493,10 +493,10 @@ input[type='search'] {
 .card:hover {
   box-shadow: var(--shadow-1);
 }
-/* Selection, focus and active-card cues are owned by the grid workstream so
-   selection and focus stay distinct (a colour-only selection ring would collide
-   with the icon+label status channel). It styles .card--selected / focus /
-   active on top of these tokens. */
+/* Selection, focus and active-card cues live with the card styling so selection
+   and focus stay distinct (a colour-only selection ring would collide with the
+   icon+label status channel); .card--selected / focus / active build on top of
+   these tokens. */
 .card__thumb {
   display: block;
   width: 100%;
@@ -522,8 +522,8 @@ input[type='search'] {
   accent-color: var(--accent);
 }
 
-/* legacy status pill retinted onto the status tokens for coherence until the
-   grid workstream adopts the .status chip */
+/* legacy status pill retinted onto the status tokens for coherence until cards
+   adopt the .status chip */
 .pill {
   display: inline-flex;
   align-items: center;
