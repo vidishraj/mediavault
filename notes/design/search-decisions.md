@@ -94,3 +94,45 @@ after would mean the bad request was already sent (and already counted against t
   **not** silently present stale rows as if they were fresh. If we keep the last good rows during a
   background refetch, they are marked as stale, not shown under a bare error banner as the baseline
   does.
+
+## 6. The list-hook contract (agreed with the grid owner)
+
+`useAssetList(query)` — one `useInfiniteQuery` over `listAssets(query, { signal })`, keyed on the
+query **excluding** the cursor. The return shape is fixed so the grid + virtualiser build against it
+once:
+
+```ts
+{
+  assets: Asset[];            // flat, APPEND-ONLY within a query (pages accumulate; existing items
+                              //   keep their index so focus/scroll are stable across fetchNextPage);
+                              //   re-derived only when pages change, memoised so the reference is
+                              //   stable between renders when nothing changed; resets to page one on
+                              //   any query change (new key).
+  total: number;              // full FILTERED count from the server (not the loaded count) — the grid
+                              //   reserves scroll height / skeleton rows from it (no layout shift).
+  status: 'loading' | 'ready' | 'empty' | 'error';
+                              // 'loading' = FIRST page only (full skeleton grid). NEVER set during a
+                              //   next-page fetch. 'empty' = successful, zero rows. 'error' =
+                              //   whole-query / first-page failure only.
+  error: ApiError | null;     // set with status==='error'.
+  fetchNextPage: () => Promise<unknown>; // rejects on a next-page failure (does NOT flip status).
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;           // the incremental one — grid shows an inline "loading more".
+  isFetchNextPageError: boolean;         // next-page failure SEAM: grid stays mounted, keeps rows,
+  nextPageError: ApiError | null;        //   shows a retryable "couldn't load more" affordance.
+  refetch: () => void;
+}
+```
+
+**Why the seams matter.** A failed next-page fetch (the 6% 503 / 429 chaos) must never discard the
+loaded rows or flip the whole grid to an error state — it is surfaced separately so the grid keeps
+its rows and offers a retry. `status:'error'` is reserved for a first-page/whole-query failure. This
+is the Task 2 resilience seam.
+
+**Live updates are identity-stable.** When an `asset.updated` event (SSE, ~6s) or a write is
+reconciled into the cache, it is an **in-place patch of the same `id`** — the row object's identity
+is preserved, never replaced wholesale or reordered on the live tick — so the grid does not lose
+focus or scroll position. Deliberate trade-off: if the update changes the active sort key (e.g.
+`updatedAt` under `updatedAt:desc`), the row is **not** re-sorted on the tick; re-sorting happens
+only on an explicit refetch or query change. Stability on a 6-second heartbeat beats a correct-but-
+jumpy re-sort. (Open: who owns the `EventSource` subscription itself — raising separately.)
