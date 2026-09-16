@@ -68,7 +68,9 @@ captured in `notes/baseline/`: the correct 1,710-row result arrives at 601 ms, t
 only the active query's data ever renders, and pass the transport's `AbortSignal` so a
 superseded request is genuinely CANCELLED, not ignored — which also stops it consuming rate
 budget. A test drives the same observer `useInfiniteQuery` uses and proves the finished query
-wins even when the stale response lands late. *Budget:* correctness does not fix the rate
+wins even when the stale response lands late. The test is non-vacuous: breaking the
+mechanism (making the query key stop varying by `q`, so a stale response would land in the
+same cache slot) turns it red — validated by mutation, not just by a green run. *Budget:* correctness does not fix the rate
 limit, so a 250 ms trailing debounce collapses a burst of typing into one request (6 → 1 for
 a six-character query), sized against 80 req/10 s where retries count and the shortest
 prefixes are the slowest calls. Rejected: a request-id guard (ignores, does not cancel — the
