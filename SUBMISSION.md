@@ -26,8 +26,12 @@ Roughly, and how you split it.
 
 | # | Defect | Where | Fixed / left / out of scope |
 | --- | --- | --- | --- |
-| 1 | Bulk update sends >50 ids in one call | `App.tsx` | |
-| 2 | | | |
+| 1 | Bulk update sends >50 ids in one call | `App.tsx` | Chunked at the cap in the transport (W1) |
+| 2 | Stale search response overwrites a newer query (no cancel; applies last-resolved) | `useAssets.ts`, `client.ts` | Fixed — query-keyed fetch + AbortSignal |
+| 3 | Every keystroke fires a request; nothing debounced (trips 80/10 s) | `App.tsx`, `useAssets.ts` | Fixed — 250 ms trailing debounce |
+| 4 | Loading, empty and error conflated (stale rows under a banner; failed first load reads as empty) | `useAssets.ts`, `AssetGrid.tsx` | Fixed — three distinct states |
+| 5 | Query state not in the URL; reload/share loses the view | `App.tsx` | Fixed — URL-backed q/status/kind/tag/sort |
+| 6 | Changing a filter can reuse a cursor from the old query (`400 stale_cursor`) | `App.tsx` | Fixed — cursor excluded from the key, unreachable |
 
 ---
 
@@ -55,7 +59,23 @@ of the taxonomy, never of a message string. Rejected: a per-call `{retryable}`
 boolean, because the retry rule belongs in one predicate, not scattered at each
 call site where it drifts.
 
-**Stale response handling**
+**Stale response handling** — Two problems that look like one, fixed separately.
+*Correctness:* a slow response for a query the user has moved past must never overwrite the
+current view. The baseline applied whatever resolved last, and the API is deliberately
+slower for short prefixes, so typing `studio` left the two-key `st` result on screen —
+captured in `notes/baseline/`: the correct 1,710-row result arrives at 601 ms, the stale
+3,397-row `st` at 1,045 ms and wins. Fix: fetch keyed on the query (`useInfiniteQuery`), so
+only the active query's data ever renders, and pass the transport's `AbortSignal` so a
+superseded request is genuinely CANCELLED, not ignored — which also stops it consuming rate
+budget. A test drives the same observer `useInfiniteQuery` uses and proves the finished query
+wins even when the stale response lands late. *Budget:* correctness does not fix the rate
+limit, so a 250 ms trailing debounce collapses a burst of typing into one request (6 → 1 for
+a six-character query), sized against 80 req/10 s where retries count and the shortest
+prefixes are the slowest calls. Rejected: a request-id guard (ignores, does not cancel — the
+slow call still counts against the budget); throttle (fires intermediate prefixes we
+discard); no-debounce-lean-on-cancel (right rows, still trips the limit). De-dup of identical
+concurrent requests is free at two layers: the transport shares one in-flight GET per
+`METHOD path`, and RQ shares one fetch per query key.
 
 **Virtualization approach**
 
@@ -79,7 +99,16 @@ makes things worse" is actually prevented. Rejected: matching on the message
 a fixed-window limiter (it would allow 80 at t=9.9s and 80 more at t=10.1s, 160
 in one trailing window, while believing it complied).
 
-**State placement and URL sync**
+**State placement and URL sync** — `q`, `status`, `kind`, `tag` and `sort` live in the URL,
+so reload and share restore the exact view; the cursor does NOT, because it is bound to a
+query and would go stale. The write strategy is split by the kind of change: typing `q` uses
+`replaceState` so a whole typing burst is one Back step rather than one per keystroke, while
+a discrete committed change (a status/kind toggle, a sort) uses `pushState` so Back/Forward
+walks between meaningful views. Pagination resets on any query change by construction: the
+query key excludes the cursor, so changing any field mints a new key and a fresh query from
+page one — `400 stale_cursor` / `bad_cursor` are UNREACHABLE rather than caught after the bad
+request was already sent. Selection and the open detail are transient UI, kept out of the
+URL. Unknown enum values in a shared link are dropped, never forwarded to the API.
 
 ---
 
@@ -92,7 +121,7 @@ Fill in real measurements, not estimates. Say which machine and browser.
 | Rendered DOM nodes at 5,000 rows loaded | | | |
 | Cards re-rendered when toggling one selection | | | |
 | Longest task during sustained scroll | | | |
-| Requests fired while typing a 6-character query | | | |
+| Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every crew member, so a 429 there is someone else's traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
 | Production bundle, gzipped | 48 kB | 58.5 kB | `NODE_ENV=production npm run build`, Vite's gzip report (Node 20, Linux). +10.5 kB is TanStack Query, replacing hand-rolled dedup/cache/retry |
 
 What was the actual bottleneck, and how did you find it?
