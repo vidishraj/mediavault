@@ -13,7 +13,7 @@ fetched with TanStack Query keyed on that identity, and only the *active* key's 
 rendered, so a response for a superseded query cannot be written into the current view — the
 overwrite in the baseline (`useAssets` calls `setState` with whatever `.then` resolves last) is
 structurally gone. On top of that, the request for a superseded query is **cancelled**, not merely
-ignored: the query function receives an `AbortSignal` (from the transport, wb-u11) and passes it to
+ignored: the query function receives an `AbortSignal` (from the transport layer) and passes it to
 `fetch`, so an in-flight "st" request is aborted the moment the query becomes "studio". Cancelled
 frees the connection and, critically, stops a doomed request from counting against the rate budget.
 

@@ -105,7 +105,7 @@ for first load — that would be two skeleton owners. The shell renders only `em
 `status === 'error'` and `status === 'empty'` never reach the grid — App renders the shell for
 those, so the grid is only ever "loading skeleton" or "rows (+ optional inline next-page affordance)".
 
-## Shell components — client2 (wb-dqu)
+## Shell components — the interface layer
 
 One message table, `messageForApiError(error): string | null` (null for `aborted`). Components:
 

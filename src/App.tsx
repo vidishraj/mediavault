@@ -18,9 +18,9 @@ const SORTS: Array<{ value: NonNullable<AssetQuery['sort']>; label: string }> = 
   { value: 'createdAt:desc', label: 'Newest' },
 ];
 
-// Interim copy for a failed load. The per-code message table is client2's (src/lib/messages.ts,
-// wb-dqu); when it lands this single call site becomes messageForApiError(error) so there is one
-// table and Task 4's "branch on code, never on message" stays structural.
+// Interim copy for a failed load. The per-code message table is owned by the interface layer;
+// when it lands, this single call site delegates to it, so there is one message table and Task 4's
+// "branch on code, never on message" stays structural. Branching is on the code, never the string.
 function describeError(error: ApiError | null): string {
   if (!error) return 'Something went wrong.';
   if (error.code === 'rate_limited') return 'Too many requests just now. Retrying shortly…';

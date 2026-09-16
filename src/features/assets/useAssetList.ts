@@ -58,8 +58,8 @@ export function assetListQueryKey(query: AssetListQuery) {
  *
  *  - Rendering is keyed on the query, so a response for a SUPERSEDED query can never be written into
  *    the current view. The baseline's "apply whatever resolves last" race cannot occur.
- *  - The query function receives an AbortSignal (wb-u11 transport), so a superseded query's request
- *    is genuinely CANCELLED, not merely ignored — it stops consuming the rate budget too.
+ *  - The query function receives an AbortSignal from the transport layer, so a superseded query's
+ *    request is genuinely CANCELLED, not merely ignored — it stops consuming the rate budget too.
  *  - The cursor lives only in pageParam, never in the key, so any query change resets pagination and
  *    no stale cursor is ever sent.
  */

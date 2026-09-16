@@ -17,7 +17,7 @@ defeating the behaviour must turn the test red.
 - `useUrlAssetQuery.history.test.tsx.pending` — typing replaces, a committed filter change pushes,
   and the query restores from the URL on mount. Mutation: make `setSearch` push must redden it.
 
-## Activate (after `wb-u11` lands on `main` and I have merged it)
+## Activate (after the transport foundation lands on `main` and I have merged it)
 
 1. `git mv notes/drafts/useDebouncedValue.test.tsx.pending src/features/assets/useDebouncedValue.test.tsx`
 2. `git mv notes/drafts/useUrlAssetQuery.history.test.tsx.pending src/features/assets/useUrlAssetQuery.history.test.tsx`
