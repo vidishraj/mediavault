@@ -210,3 +210,31 @@ export function summarizeBulk(applied: number, failed: number): string {
   if (failed === 0) return `${updated}.`;
   return `${updated}. ${failed} could not be changed.`;
 }
+
+/** Short reason phrases for the per-item bulk failure codes. */
+const BULK_REASON: Record<string, string> = {
+  legal_hold: 'on legal hold',
+  conflict: 'a momentary clash',
+  not_found: 'no longer exist',
+  version_conflict: 'changed since you loaded them',
+  write_failed: 'failed to save',
+  invalid_status: 'an invalid status change',
+};
+
+/**
+ * Group the failed items of a 207 partial result by reason, e.g.
+ * "2 on legal hold, 1 a momentary clash." Keeps the partial-failure state
+ * specific rather than a bare "2 failed".
+ */
+export function bulkFailureReasons(results: Array<{ ok: boolean; code?: string }>): string {
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    if (r.ok) continue;
+    const code = r.code ?? 'unknown';
+    counts.set(code, (counts.get(code) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()].map(
+    ([code, n]) => `${n} ${BULK_REASON[code] ?? 'could not be changed'}`,
+  );
+  return parts.length ? `${parts.join(', ')}.` : '';
+}
