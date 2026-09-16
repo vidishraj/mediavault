@@ -324,7 +324,10 @@ senior than a styled one, and it keeps the eye on the content.
   error with nothing on screen is a full state; a fetch error over existing
   results is a non-blocking banner. Offline is detected from the browser signal.
   Partial bulk failure is summarised in plain language ("12 assets updated. 2
-  could not be changed.").
+  could not be changed."), and its affordance is honest: the bulk bar offers Try
+  again only while a retryable subset is still present, so once the only
+  remaining failures are permanent (e.g. legal hold) the retry disappears and
+  just Dismiss is left - a retry that cannot succeed is never offered.
 - **Contrast.** Checked against WCAG 2.1 AA using `tools/contrast-check.mjs`, a
   script implementing the WCAG relative-luminance formula (the same maths as the
   WebAIM Contrast Checker); run with `node tools/contrast-check.mjs`, it exits
@@ -341,7 +344,12 @@ senior than a styled one, and it keeps the eye on the content.
   continuing."; `version_conflict` becomes "This asset changed while you were
   editing - refresh to see it, then reapply your change."; `legal_hold` explains
   that assets on legal hold cannot be archived. Each message also carries a tone
-  and whether a retry can help, so the UI can offer the right affordance.
+  and whether a retry can help, so the UI can offer the right affordance. A
+  partial bulk result names why each subset failed in one line and separates the
+  permanent cause from the transient one - a chaos-on run returned "64 assets
+  updated. 8 could not be changed. 7 on legal hold, 1 a momentary clash. Items on
+  legal hold cannot be changed.", so the user can see that the clash will be
+  retried and the legal-hold items will not.
 - **On-device pass and screenshots.** Outstanding, and honestly so. The running
   application has not been driven end to end in a real browser, so the on-device
   pass and screenshots are to be captured during the recorded walkthrough rather
