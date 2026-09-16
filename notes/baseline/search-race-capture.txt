@@ -1,0 +1,84 @@
+# Captured 2026-09-16 04:33:18Z
+# node v20.20.2 | Linux 6.12.0-201.74.2.2.el9uek.aarch64 aarch64
+# API: server/index.mjs, chaos ON, latency ON (health: {"ok":true,"assets":12400,"chaos":true,"latency":true})
+
+===================== RUN 1 =====================
+
+Requests fired while typing a 6-character query: 6
+(one per keystroke; the baseline debounces nothing)
+
+SENT ORDER (what the user typed):
+  q="s"        sent@   0ms recv@ 973ms  total=9746   first3=a_00625,a_01035,a_01138  req=19a21e4b-bc92-47ed-87d6-2f132c20e619
+  q="st"       sent@ 149ms recv@1166ms  total=3397   first3=a_00625,a_01317,a_03192  req=e18b0e9f-e402-484e-9336-577326bed288
+  q="stu"      sent@ 221ms recv@ 755ms  total=upstream_unavailable first3=  req=d5db9178-6e16-45b3-b622-63c7e840775f
+  q="stud"     sent@ 294ms recv@ 885ms  total=1710   first3=a_08449,a_08505,a_11492  req=470fc534-c946-463a-bd3e-353345bcdd98
+  q="studi"    sent@ 366ms recv@ 631ms  total=1710   first3=a_08449,a_08505,a_11492  req=f35cb737-8ab1-43c7-b8c8-54b3c04b7511
+  q="studio"   sent@ 443ms recv@ 565ms  total=1710   first3=a_08449,a_08505,a_11492  req=b6be8092-3b9d-40f8-b19e-3bd19657cb17
+
+ARRIVAL ORDER (what actually came back):
+  recv@ 565ms  q="studio"  total=1710
+  recv@ 631ms  q="studi"  total=1710
+  recv@ 755ms  q="stu"  total=upstream_unavailable
+  recv@ 885ms  q="stud"  total=1710
+  recv@ 973ms  q="s"  total=9746
+  recv@1166ms  q="st"  total=3397
+
+--- THE RACE ---
+User finished typing:      q="studio"  total=1710  first3=a_08449,a_08505,a_11492
+Last response to arrive:   q="st"  total=3397  first3=a_00625,a_01317,a_03192
+
+BASELINE RESULT: the grid shows the q="st" rows, NOT the q="studio" rows the user asked for. Stale response won.
+
+===================== RUN 2 =====================
+
+Requests fired while typing a 6-character query: 6
+(one per keystroke; the baseline debounces nothing)
+
+SENT ORDER (what the user typed):
+  q="s"        sent@   0ms recv@ 882ms  total=9746   first3=a_00625,a_01035,a_01138  req=17ab20c6-774e-4056-86d7-b0544727f4a2
+  q="st"       sent@ 127ms recv@1064ms  total=3397   first3=a_00625,a_01317,a_03192  req=30438132-5c75-4319-899e-dcec8db9515a
+  q="stu"      sent@ 199ms recv@ 727ms  total=1710   first3=a_08449,a_08505,a_11492  req=fd5f49a5-e1d5-4f82-be69-807cb12d1c07
+  q="stud"     sent@ 270ms recv@ 764ms  total=1710   first3=a_08449,a_08505,a_11492  req=78aa51a5-31cb-47cc-b0d3-4f2dc1f6d8c0
+  q="studi"    sent@ 343ms recv@ 661ms  total=1710   first3=a_08449,a_08505,a_11492  req=6ff617c5-0f69-46d7-b5dd-0fd10623d5e7
+  q="studio"   sent@ 416ms recv@ 552ms  total=1710   first3=a_08449,a_08505,a_11492  req=3edccd60-3d37-45e1-bca2-3a08769a971a
+
+ARRIVAL ORDER (what actually came back):
+  recv@ 552ms  q="studio"  total=1710
+  recv@ 661ms  q="studi"  total=1710
+  recv@ 727ms  q="stu"  total=1710
+  recv@ 764ms  q="stud"  total=1710
+  recv@ 882ms  q="s"  total=9746
+  recv@1064ms  q="st"  total=3397
+
+--- THE RACE ---
+User finished typing:      q="studio"  total=1710  first3=a_08449,a_08505,a_11492
+Last response to arrive:   q="st"  total=3397  first3=a_00625,a_01317,a_03192
+
+BASELINE RESULT: the grid shows the q="st" rows, NOT the q="studio" rows the user asked for. Stale response won.
+
+===================== RUN 3 =====================
+
+Requests fired while typing a 6-character query: 6
+(one per keystroke; the baseline debounces nothing)
+
+SENT ORDER (what the user typed):
+  q="s"        sent@   0ms recv@ 958ms  total=9746   first3=a_00625,a_01035,a_01138  req=c2f3b8d0-e878-4f56-9667-015492e9bc4a
+  q="st"       sent@ 121ms recv@1045ms  total=3397   first3=a_00625,a_01317,a_03192  req=a7258c1d-f1ef-404f-9379-cad2480368e4
+  q="stu"      sent@ 192ms recv@ 803ms  total=1710   first3=a_08449,a_08505,a_11492  req=55c972e5-2380-41fa-ac0d-989996963f05
+  q="stud"     sent@ 267ms recv@ 787ms  total=1710   first3=a_08449,a_08505,a_11492  req=d22376b6-71cf-4438-94a8-c1218d4dbb6d
+  q="studi"    sent@ 339ms recv@ 622ms  total=1710   first3=a_08449,a_08505,a_11492  req=21757a24-f27a-41cb-b8ea-c7793bd88ee2
+  q="studio"   sent@ 410ms recv@ 681ms  total=1710   first3=a_08449,a_08505,a_11492  req=7f1fcf63-ac12-40ef-a1f4-992169ea38eb
+
+ARRIVAL ORDER (what actually came back):
+  recv@ 622ms  q="studi"  total=1710
+  recv@ 681ms  q="studio"  total=1710
+  recv@ 787ms  q="stud"  total=1710
+  recv@ 803ms  q="stu"  total=1710
+  recv@ 958ms  q="s"  total=9746
+  recv@1045ms  q="st"  total=3397
+
+--- THE RACE ---
+User finished typing:      q="studio"  total=1710  first3=a_08449,a_08505,a_11492
+Last response to arrive:   q="st"  total=3397  first3=a_00625,a_01317,a_03192
+
+BASELINE RESULT: the grid shows the q="st" rows, NOT the q="studio" rows the user asked for. Stale response won.
