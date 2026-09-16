@@ -18,14 +18,55 @@ const list = useAssetList({ ...query, q: debouncedQ, limit: 24 });
 ## Composition (who renders what, keyed on `list.status`)
 
 ```
+OfflineBanner (persistent, top)              ← client2 (self-contained, no props)
 Controls (search, sort, status, kind)        ← builder (App)
+BulkBar (when selection non-empty)           ← client2 presentational, fed by builder2's action
 ResultCount(loaded, total, status)           ← client2 (shell copy)
 status === 'error' → QueryErrorBanner        ← client2 (top banner, whole-query failure)
 status === 'empty' → EmptyState              ← client2 (whole-view, zero rows)
 status ∈ {loading, ready} → AssetGrid        ← client (skeleton on loading, rows on ready,
                                                   inline "loading more" / "couldn't load more")
-BulkBar, AssetDetail                          ← Task 3 (unchanged for now)
+AssetDetail                                   ← builder2 (Task 3; RQ ['asset', id])
 ```
+
+Shell components import from `@/components/*` (client2). `messageForApiError(error): string | null`
+lives in `@/lib/messages` (client2); App swaps `describeError` for it the moment it is on main.
+
+## Selection — one store (builder2), App bridges it into props
+
+builder2 owns a single headless selection store (`useSelection`). App reads it and threads the three
+selection props so the grid stays props-driven and imports no store:
+
+```
+selectedIds   ← store.selectedIds
+onToggleSelect ← store.toggle            // Space; also sets the anchor
+onSelectRange  ← (ids) => store.replaceWith(ids)   // Shift+Arrow; grid computes the id range
+```
+
+Anchor + range math live in the grid (all range gestures originate there); the store needs no
+`extendTo`. `AssetGridProps` is unchanged by this — App just sources the props from the store instead
+of a local `useState` Set.
+
+## Bulk — presentation (client2) + action (builder2), composed by App
+
+To avoid two bulk-bar owners: the BAR is presentational (client2), the ACTION is a data hook
+(builder2). App wires them.
+
+```ts
+// client2 (presentational):
+function BulkBar(props: {
+  selectedCount: number;
+  onApply: (status: AssetStatus) => void;
+  onClear: () => void;
+  result: BulkResult | null;            // renders the outcome via summarizeBulk + messageForApiError
+}): JSX.Element;
+
+// builder2 (data, Task 3): a hook, NOT a bar.
+// useBulkStatus() → { apply(status): void; result: BulkResult | null; isApplying: boolean }
+//   owns chunking >50, the API call, optimistic setQueriesData + rollback, 207 partial handling.
+```
+
+App: `selectedCount`/`onClear` from the selection store; `onApply`/`result` from `useBulkStatus`.
 
 ## `AssetGrid` — client (Task 2)
 
