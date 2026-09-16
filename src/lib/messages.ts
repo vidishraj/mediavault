@@ -142,6 +142,20 @@ export function messageForError(code?: string | null, httpStatus?: number): User
   return UNKNOWN;
 }
 
+/**
+ * Fallback for a failure we cannot yet classify. It deliberately does NOT read
+ * the error's message text (Task 4 forbids branching on message strings): it
+ * only distinguishes offline (a real browser signal) from a generic failure.
+ * Once the data layer surfaces a structured `code`, call
+ * messageForError(code, httpStatus) directly for a specific message instead.
+ */
+export function genericFailure(): UserMessage {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return messageForError('offline');
+  }
+  return messageForError();
+}
+
 /** Human summary of a bulk result, e.g. "12 updated. 2 could not be changed." */
 export function summarizeBulk(applied: number, failed: number): string {
   const updated = `${applied} ${applied === 1 ? 'asset' : 'assets'} updated`;

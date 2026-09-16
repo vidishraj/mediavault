@@ -437,6 +437,19 @@ input[type='search'] {
     animation: none;
   }
 }
+.skel-line {
+  height: 10px;
+  border-radius: var(--r-sm);
+}
+.skel-line--name {
+  width: 70%;
+  margin: var(--s1) 0 6px;
+}
+.skel-line--meta {
+  width: 40%;
+  height: 16px;
+  border-radius: var(--r-pill);
+}
 
 /* ---------- grid + cards ----------
    Structure is intentionally light here; the grid workstream refines card

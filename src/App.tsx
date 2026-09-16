@@ -3,7 +3,11 @@ import { bulkSetStatus } from '@/api/client';
 import { AssetDetail } from '@/features/assets/AssetDetail';
 import { AssetGrid } from '@/features/assets/AssetGrid';
 import { useAssets } from '@/features/assets/useAssets';
+import { Banner } from '@/components/Banner';
+import { StateBlock } from '@/components/StateBlock';
+import { GridSkeleton } from '@/components/Skeleton';
 import { statusLabel } from '@/lib/format';
+import { genericFailure, summarizeBulk, type UserMessage } from '@/lib/messages';
 import type { Asset, AssetStatus, AssetQuery } from '@/lib/types';
 
 const STATUSES: AssetStatus[] = ['draft', 'in_review', 'approved', 'archived'];
@@ -20,10 +24,20 @@ export function App() {
   const [sort, setSort] = useState<NonNullable<AssetQuery['sort']>>('updatedAt:desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [flash, setFlash] = useState<UserMessage | null>(null);
 
   // Every keystroke sends a request. Nothing is debounced or cancelled.
   const { items, total, loading, error } = useAssets({ q, status, sort, limit: 24 });
+
+  const filtersActive = q.trim() !== '' || status.length > 0;
+  // Until the data layer surfaces a typed error code, any fetch failure maps to
+  // an offline-aware generic message rather than the leaked server string.
+  const listError = error ? genericFailure() : null;
+
+  function clearFilters() {
+    setQ('');
+    setStatus([]);
+  }
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -37,14 +51,18 @@ export function App() {
   async function applyBulkStatus(next: AssetStatus) {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
-    setNotice(null);
+    setFlash(null);
     try {
       // Sends every selected id in one call, which the API refuses above 50.
       const result = await bulkSetStatus(ids, next);
-      setNotice(`${result.applied} updated, ${result.failed} failed.`);
+      setFlash({
+        title: summarizeBulk(result.applied, result.failed),
+        tone: result.failed > 0 ? 'warn' : 'info',
+        retryable: false,
+      });
       setSelectedIds(new Set());
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Bulk update failed');
+    } catch {
+      setFlash(genericFailure());
     }
   }
 
@@ -94,27 +112,54 @@ export function App() {
 
       {selectedIds.size > 0 && (
         <div className="bulkbar">
-          <span>{selectedIds.size} selected</span>
+          <span className="bulkbar__count">{selectedIds.size} selected</span>
           {STATUSES.map((s) => (
             <button key={s} onClick={() => applyBulkStatus(s)}>
               Set {statusLabel(s).toLowerCase()}
             </button>
           ))}
-          <button onClick={() => setSelectedIds(new Set())}>Clear selection</button>
+          <span className="bulkbar__spacer" />
+          <button className="btn-subtle" onClick={() => setSelectedIds(new Set())}>
+            Clear selection
+          </button>
         </div>
       )}
 
-      {notice && <p className="notice">{notice}</p>}
-      {error && <p className="error">{error}</p>}
+      {flash && <Banner message={flash} onDismiss={() => setFlash(null)} />}
+      {/* A fetch error while results are still on screen: a strip, not a takeover. */}
+      {listError && items.length > 0 && <Banner message={listError} />}
 
       <main className="content">
-        <AssetGrid
-          assets={items}
-          selectedIds={selectedIds}
-          activeId={activeId}
-          onToggleSelect={toggleSelect}
-          onOpen={setActiveId}
-        />
+        {listError && items.length === 0 ? (
+          <StateBlock variant="error" title={listError.title} body={listError.body} />
+        ) : loading && items.length === 0 ? (
+          <GridSkeleton />
+        ) : items.length === 0 ? (
+          <StateBlock
+            variant="empty"
+            title={filtersActive ? 'No assets match these filters' : 'No assets yet'}
+            body={
+              filtersActive
+                ? 'Try a broader search, or clear a filter to see more.'
+                : 'Assets you add will show up here.'
+            }
+            action={
+              filtersActive ? (
+                <button className="btn-subtle" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <AssetGrid
+            assets={items}
+            selectedIds={selectedIds}
+            activeId={activeId}
+            onToggleSelect={toggleSelect}
+            onOpen={setActiveId}
+          />
+        )}
         {activeId && (
           <AssetDetail id={activeId} onClose={() => setActiveId(null)} onSaved={handleSaved} />
         )}
