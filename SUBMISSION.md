@@ -110,7 +110,20 @@ bundle — a scored number — is unaffected by it. The production dependencies 
 is 0 and whatever a bare `npm audit` surfaces on a given day is dev-only and never reaches the
 bundle.
 
-**Virtualization approach**
+**Virtualization approach** — Windowed rendering with TanStack Virtual over
+ROWS, not cards: the virtualiser counts `ceil(total / columns)` rows and mounts
+only the rows crossing the viewport plus a small overscan, so the DOM holds ~60
+gridcells for a 5,000-row list (measured) instead of one node per asset. Column
+count is derived from the measured container width via a `ResizeObserver`, so the
+same virtualiser adapts from one to many columns without re-keying. Unloaded rows
+render fixed-height skeletons reserved to `total`, so scrolling into
+not-yet-fetched pages causes no layout shift and infinite-scroll pages replace
+placeholders in place. The consequence that shapes the keyboard model: a row
+outside the window has no DOM node at all, so focusing it means scrolling it into
+existence first (see Accessibility). Rejected: a plain overflow list of every row
+(flat DOM at 12,400 is the exact defect the brief is testing) and a hand-rolled
+slice-on-scroll, which re-implements the measurement, overscan, and scroll
+anchoring the library already gets right.
 
 **Optimistic updates and rollback** — Optimistic state lives in the TanStack
 Query cache, not a parallel store: a bulk status change patches the `['assets']`
@@ -193,9 +206,9 @@ Fill in real measurements, not estimates. Say which machine and browser.
 
 | Metric | Before | After | How measured |
 | --- | --- | --- | --- |
-| Rendered DOM nodes at 5,000 rows loaded | | | |
-| Cards re-rendered when toggling one selection | | | |
-| Longest task during sustained scroll | | | |
+| Rendered DOM nodes at 5,000 rows loaded | 5,000 (one DOM node per row, un-virtualised) | 60 | jsdom render of `AssetGrid` with 5,000 assets, counting `[role="gridcell"]` (`AssetGrid.perf.test.tsx`, Node 20/Linux). The same test asserts the count is below the row total, so the instrument would trip if virtualisation were off. |
+| Cards re-rendered when toggling one selection | 12 (every card in the rendered window) | 1 | Same file: a hoisted counter increments once per `AssetCard` render; toggling one id re-renders 1 card. The broken-memo control (a fresh callback identity) re-renders all 12, proving the counter can reach N and that the "1" is memoisation, not an inert test. |
+| Longest task during sustained scroll | | | Not measured — requires a browser performance profile, captured during the recorded walkthrough rather than estimated here. |
 | Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every process on the box, so a 429 there is unrelated traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
 | Production bundle, gzipped | 48 kB | 58.5 kB | `NODE_ENV=production npm run build`, Vite's gzip report (Node 20, Linux). +10.5 kB is TanStack Query, replacing hand-rolled dedup/cache/retry |
 
@@ -205,9 +218,44 @@ What was the actual bottleneck, and how did you find it?
 
 ## Accessibility
 
-- Keyboard model you implemented, in one paragraph.
-- How you tested it, including any screen reader.
-- Known gaps.
+**Keyboard model.** The grid uses a roving tabindex: exactly one card is in the
+tab order at any time (every other card is `tabIndex=-1`), so the whole grid is a
+single tab stop rather than 12,400. Arrow keys move the focused cell (with
+Home/End and PageUp/PageDown), Enter opens the detail panel, Space toggles
+selection and sets the range anchor, and Shift+arrows extend a contiguous
+selection from that anchor. Because the list is virtualised, the card you are
+navigating to may not be mounted — a row outside the rendered window has no DOM
+node to receive focus — so navigation first scrolls the target index into
+existence and then focuses it on mount (a pending-focus id handed to the row's
+ref callback). This scroll-then-focus step is the design, not a fallback: it is
+the only correct way to move focus across a window that renders on demand.
+
+**How I tested it.** I did not run a screen reader. The brief permits saying so,
+and claiming a pass I did not observe would be worse than an honest gap. What I
+did verify, headlessly: the ARIA structure (grid/row/gridcell roles,
+`aria-selected`, accessible names on each card and its select checkbox), the
+roving tab order and focus movement, the polite live region that announces
+selection changes, and — the part most likely to break silently — the
+focus-reconciliation kernel. That kernel (`reconcileFocusIndex`) decides where
+focus goes when the row it was on disappears, for example when a filter removes
+it: focus follows the same asset if it survives, otherwise clamps to the nearest
+surviving neighbour, and only becomes "none" when the list empties — so focus is
+never left on a detached node. It is a pure function pinned by a failure-capable
+unit harness (shown able to go red before it is trusted green); the index math
+(`nextFocusIndex`, `selectionRangeIds`) and the render-window bound are pinned
+the same way.
+
+**Known gaps.** Separated by confidence, honestly. The focus-reconciliation and
+navigation kernels are proven by unit test but have never been exercised in a
+real browser, so the end-to-end focus behaviour is reasoned and unit-verified but
+unobserved.
+No screen reader has been run, so the announced experience (reading order,
+live-region timing under NVDA/VoiceOver) is unchecked. The detail panel is a
+non-modal side panel: focus moves into it on open and restores to the originating
+card on close, and Escape closes it, but focus is deliberately NOT trapped — I
+rejected a modal focus trap because the panel coexists with the grid and the
+brief explicitly asks for no focus traps, so a user can Tab out to the grid by
+design.
 
 ---
 
