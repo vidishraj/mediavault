@@ -14,8 +14,8 @@
 //        node notes/baseline/reproduce-search-race.mjs   (in another)
 
 // Point this at an ISOLATED api instance for any rate-sensitive or request-count measurement.
-// The mock's rate limiter keys on the socket remote address, and every crew member runs on
-// localhost, so the shared :8787 dev instance is ONE 80-req/10s bucket for the whole team. A
+// The mock's rate limiter keys on the socket remote address, and every process runs on
+// localhost, so the shared :8787 dev instance is ONE 80-req/10s bucket for everything on the box. A
 // 429 there could be someone else's traffic. Run your own: PORT=8801 node server/index.mjs.
 const BASE = process.env.API_BASE ?? 'http://localhost:8787';
 const PHRASE = 'studio';

@@ -1,12 +1,23 @@
 import { QueryClient } from '@tanstack/react-query';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { chunk, mapWithConcurrency } from './concurrency';
 import { ApiError, apiErrorFromResponse, apiErrorFromThrown, parseRetryAfter } from './errors';
-import { RollingRateLimiter } from './rateLimiter';
+import { __setRateLimiter, RollingRateLimiter } from './rateLimiter';
 import { chunkedHelperOptions } from './queryClient';
 import { inFlightCount, request } from './http';
 import { computeDelayMs, DEFAULT_RETRY, isRetryable, shouldRetry, withRetry } from './retry';
+
+// Swap the shared limiter for an effectively unlimited one so request-based
+// tests measure logic, not real token refill. The sliding-window test below
+// builds its OWN limiter, so it is unaffected by this.
+let restoreLimiter: () => void;
+beforeEach(() => {
+  restoreLimiter = __setRateLimiter(new RollingRateLimiter(1_000_000, 10_000));
+});
+afterEach(() => {
+  restoreLimiter();
+});
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
