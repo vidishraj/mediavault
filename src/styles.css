@@ -689,6 +689,19 @@ input[type='search'] {
   padding: var(--s2) var(--s3) var(--s2) 0;
 }
 .card__name {
+  /* The primary identifier must never be the flex item that loses: in a
+     fixed-height column, an unprotected name flex-shrinks to 0 and its own
+     overflow:hidden then clips it to nothing (silently). Pin it to one line and
+     forbid it shrinking; if anything truncates it is the metadata, never this. */
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Metadata is a single line of secondary info; scoped to the card (NOT global
+   .muted, which wraps freely in the detail panel) so it can never wrap to the
+   three lines that consumed the fixed 96px row and starved the name. */
+.card__body .muted {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
