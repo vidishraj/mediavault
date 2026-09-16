@@ -49,11 +49,10 @@ export function App() {
     resetBulk.current();
   }, [selection.selectedIds]);
 
-  // The grid reads membership as `selectedIds.has(id)` and never mutates it; the store hands out a
-  // ReadonlySet (its immutability guarantee) backed by a real Set, so this widening keeps the STABLE
-  // reference the 12,400-card memoisation depends on rather than copying into a new Set each render.
-  // (AssetGridProps.selectedIds could be widened to ReadonlySet<string> to drop this assertion.)
-  const selectedIds = selection.selectedIds as Set<string>;
+  // The grid reads membership as `selectedIds.has(id)` and never mutates it, so the store's
+  // ReadonlySet passes straight through by reference — which keeps the STABLE reference the
+  // 12,400-card memoisation depends on, rather than copying into a new Set each render.
+  const selectedIds = selection.selectedIds;
 
   function handleSaved(_asset: Asset) {
     // Live reconciliation happens in the query cache (the bulk hook and the detail edit both write

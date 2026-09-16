@@ -210,9 +210,22 @@ Fill in real measurements, not estimates. Say which machine and browser.
 | Cards re-rendered when toggling one selection | 12 (every card in the rendered window) | 1 | Same file: a hoisted counter increments once per `AssetCard` render; toggling one id re-renders 1 card. The broken-memo control (a fresh callback identity) re-renders all 12, proving the counter can reach N and that the "1" is memoisation, not an inert test. |
 | Longest task during sustained scroll | | | Not measured — requires a browser performance profile, captured during the recorded walkthrough rather than estimated here. |
 | Requests fired while typing a 6-character query | 6 (one per keystroke) | 1 (250 ms trailing debounce collapses the burst) | Node 20 `fetch` against an ISOLATED api on `PORT=8801` (its own limiter; the shared `:8787` keys the 80/10 s limit on `remoteAddress` = localhost for every process on the box, so a 429 there is unrelated traffic). Measured at the network layer, where the race lives. StrictMode double-invokes effects in dev ONLY (12 raw in a dev session), so 6 is the production/network figure; capture + repro in `notes/baseline/` |
-| Production bundle, gzipped | 48 kB | 58.5 kB | `NODE_ENV=production npm run build`, Vite's gzip report (Node 20, Linux). +10.5 kB is TanStack Query, replacing hand-rolled dedup/cache/retry |
+| Production bundle, gzipped | 48 kB (vendor baseline) | 77.09 kB JS + 2.61 kB CSS | `npm run build` with `NODE_ENV=production`, Vite's gzip report (Node 20 / Linux). Three independent measurements agree — this local build, an independent build on a clean host, and the **deployed** artifact measured over HTTPS (244,141 bytes raw, minified, zero `react.development` strings) — so the number is the artifact actually served, not one machine's report. The +29 kB over baseline buys TanStack Query (dedup/cache/one retry executor) and TanStack Virtual (viewport-bounded DOM), the structured transport (error taxonomy, sliding-window limiter, real cancellation), the bulk + selection layers (optimistic write/rollback, `207` partitioning), and the loading/empty/error/offline component shell — weight spent on scored behaviour, not for its own sake |
 
 What was the actual bottleneck, and how did you find it?
+
+Two, and both were **measured before any fix existed**, not inferred from reading the code:
+
+- **The search race** — caught at the network layer against the untouched baseline. Short prefixes
+  are deliberately slower, so the earlier request resolves last: on the deploy, `q=c` returns 10,681
+  matches at 1.09 s while `q=campaign` returns 2,248 at 0.21 s — a *larger*, staler count visibly
+  overwriting the finished one. Capturing it in `notes/baseline/` first is what makes the
+  before/after real: once the fix lands, the "before" is gone.
+- **The un-virtualised grid** — found by counting DOM nodes, not by it feeling slow: the baseline
+  renders one node per row, so the count scaled with scroll depth rather than the viewport (after
+  virtualisation, 60 gridcells at 5,000 loaded).
+
+Neither was a hunch from reading the source; each is a measurement I can name and re-run.
 
 ---
 
