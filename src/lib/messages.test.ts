@@ -46,3 +46,22 @@ describe('describeError narrows structurally', () => {
     warn.mockRestore();
   });
 });
+
+describe('consequential codes map to their exact user title', () => {
+  // Pins the copy end of the contract the data layer's chain feeds into: a real
+  // 429 arrives at describeError as { code: 'rate_limited' } and must yield this
+  // specific title, not the generic fallback. A reword here is a conscious change
+  // that reddens this test rather than drifting silently.
+  const CASES: Array<[string, string]> = [
+    ['rate_limited', 'Slowing down to keep up'],
+    ['version_conflict', 'This asset changed while you were editing'],
+    ['legal_hold', 'This asset is on legal hold'],
+    ['upstream_unavailable', 'MediaVault is briefly unavailable'],
+  ];
+  for (const [code, title] of CASES) {
+    it(`${code} -> "${title}"`, () => {
+      expect(describeError({ code })).toBe(title);
+      expect(describeError({ code })).not.toBe(GENERIC_ERROR_TITLE);
+    });
+  }
+});
