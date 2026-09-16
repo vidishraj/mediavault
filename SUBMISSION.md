@@ -151,18 +151,52 @@ What was the actual bottleneck, and how did you find it?
 
 ## Interface decisions
 
-Three or four sentences: what you were optimising for, and the decisions that
-follow from it. Then briefly:
+I optimised for a reviewer who scans hundreds of cards and needs to trust what
+they see: legibility, a status that is unambiguous at a glance, and failure
+states that say what to do next. Restraint was a deliberate choice over
+decoration - one accent, one neutral ramp, four status hues, and nothing
+ornamental - because on this brief a calm, consistent surface reads as more
+senior than a styled one, and it keeps the eye on the content.
 
-- **Visual system.** Your colour, spacing and type decisions, and where they live.
-- **Status treatment.** How the four statuses read as a progression, and how they
-  stay distinguishable without relying on colour.
-- **States.** What you did with loading, empty, error, offline and partial
-  failure.
-- **Contrast.** What you checked against, and with what.
-- **Copy.** Any user-facing message you rewrote and why.
-
-Screenshots in the repo are welcome — link them here.
+- **Visual system.** A small set of tokens in `src/styles.css` with readable
+  intent: one neutral ink ramp (primary/secondary/tertiary), a single accent, a
+  4px spacing step used everywhere, a short type scale, and two line weights (a
+  decorative hairline plus a stronger one for control borders). Everything
+  downstream references the tokens rather than raw values.
+- **Status treatment.** The four statuses are modelled as a lifecycle in
+  `src/lib/status.ts` (draft -> in_review -> approved -> archived) and the colour
+  runs as a progression: neutral, warm amber, green, then a cooled retired slate.
+  Colour is never the only channel - each status carries a shape-distinct icon
+  (pencil, half-filled circle, check, filed box) and its text label, so it stays
+  readable for someone who cannot separate red from green. The chip label is
+  always dark ink on a pale tint, so its contrast never depends on the hue.
+- **States.** Loading is a calm skeleton that mirrors the card layout (disabled
+  under prefers-reduced-motion) rather than a spinner, so a slow, out-of-order
+  API reads as loading and not broken. Empty distinguishes "no assets yet" from
+  "nothing matches these filters" and offers a Clear filters action. A fetch
+  error with nothing on screen is a full state; a fetch error over existing
+  results is a non-blocking banner. Offline is detected from the browser signal.
+  Partial bulk failure is summarised in plain language ("12 assets updated. 2
+  could not be changed.").
+- **Contrast.** Checked against WCAG 2.1 AA using `tools/contrast-check.mjs`, a
+  script implementing the WCAG relative-luminance formula (the same maths as the
+  WebAIM Contrast Checker); it fails the build if any pair misses its bar.
+  Measured ratios: body ink `#1b1d21` on white 16.9:1; secondary `#585d66` 6.6:1;
+  tertiary `#6f757e` 4.6:1 (large only); white on accent `#2350c9` 6.9:1; danger
+  `#a5301f` on white 6.9:1; status labels 14.5-15.3:1 on their tints; status
+  icons 4.7-6.2:1; control border `#838a93` 3.5:1 on white and 3.2:1 on the soft
+  surface. All pass their AA bar (4.5:1 text, 3:1 large/graphic).
+- **Copy.** Every user-facing failure is rewritten in `src/lib/messages.ts`,
+  keyed on the API error `code` (never the message string, which Task 4 forbids).
+  The server's `429: Too many requests in the last 10 seconds.` becomes "Slowing
+  down to keep up - too many requests just now. Pausing a few seconds, then
+  continuing."; `version_conflict` becomes "This asset changed while you were
+  editing - refresh to see it, then reapply your change."; `legal_hold` explains
+  that assets on legal hold cannot be archived. Each message also carries a tone
+  and whether a retry can help, so the UI can offer the right affordance.
+- **Screenshots.** Link forthcoming, captured from the running app once the
+  integrated UI is deployed; the states worth seeing are loading, empty, error,
+  offline, partial bulk failure and the bulk action bar, not just the happy path.
 
 ---
 
